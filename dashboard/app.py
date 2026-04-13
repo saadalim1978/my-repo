@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import arabic_reshaper
-from bidi.algorithm import get_display
 from flask import (
     Flask,
     Response,
@@ -632,7 +631,8 @@ def register_pdf_font() -> None:
 
 
 def shape_arabic(text: str) -> str:
-    return get_display(arabic_reshaper.reshape(text))
+    # Lightweight shaping that avoids extra native build dependencies on Render.
+    return arabic_reshaper.reshape(text)[::-1]
 
 
 def draw_rtl_text(pdf: canvas.Canvas, text: str, x: float, y: float, font_size: int = 12) -> None:
