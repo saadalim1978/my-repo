@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
 
@@ -95,6 +96,14 @@ class AppTestCase(unittest.TestCase):
     def test_payroll_download_is_pdf(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
         response = self.client.get("/payroll/1/download")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/pdf", response.headers["Content-Type"])
+        self.assertTrue(response.data.startswith(b"%PDF"))
+
+    def test_payroll_download_is_pdf_without_custom_font(self) -> None:
+        self.login("ahmed@competitive.local", "Employee@123")
+        with patch("app.pdfmetrics.getRegisteredFontNames", return_value=[]):
+            response = self.client.get("/payroll/1/download")
         self.assertEqual(response.status_code, 200)
         self.assertIn("application/pdf", response.headers["Content-Type"])
         self.assertTrue(response.data.startswith(b"%PDF"))

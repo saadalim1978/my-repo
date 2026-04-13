@@ -626,8 +626,17 @@ def format_month_label(value: str) -> str:
 
 
 def register_pdf_font() -> None:
-    if ARABIC_FONT_NAME not in pdfmetrics.getRegisteredFontNames() and ARABIC_FONT_PATH.exists():
-        pdfmetrics.registerFont(TTFont(ARABIC_FONT_NAME, str(ARABIC_FONT_PATH)))
+    candidate_paths = [
+        ARABIC_FONT_PATH,
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+    ]
+    if ARABIC_FONT_NAME in pdfmetrics.getRegisteredFontNames():
+        return
+    for path in candidate_paths:
+        if path.exists():
+            pdfmetrics.registerFont(TTFont(ARABIC_FONT_NAME, str(path)))
+            return
 
 
 def shape_arabic(text: str) -> str:
@@ -636,7 +645,8 @@ def shape_arabic(text: str) -> str:
 
 
 def draw_rtl_text(pdf: canvas.Canvas, text: str, x: float, y: float, font_size: int = 12) -> None:
-    pdf.setFont(ARABIC_FONT_NAME, font_size)
+    font_name = ARABIC_FONT_NAME if ARABIC_FONT_NAME in pdfmetrics.getRegisteredFontNames() else "Helvetica"
+    pdf.setFont(font_name, font_size)
     pdf.drawRightString(x, y, shape_arabic(text))
 
 
@@ -655,7 +665,10 @@ def build_payroll_pdf(payroll: sqlite3.Row) -> bytes:
     draw_rtl_text(pdf, "مسير راتب الموظف", width - 80, height - 125, 14)
 
     if logo_path.exists():
-        pdf.drawImage(ImageReader(str(logo_path)), 55, height - 155, width=90, height=65, mask="auto")
+        try:
+            pdf.drawImage(ImageReader(str(logo_path)), 55, height - 155, width=90, height=65, mask="auto")
+        except Exception:
+            pass
 
     pdf.setFillColorRGB(0.08, 0.08, 0.08)
     draw_rtl_text(pdf, f"اسم الموظف: {payroll['full_name']}", width - 60, height - 220, 14)
