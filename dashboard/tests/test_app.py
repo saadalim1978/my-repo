@@ -36,7 +36,7 @@ class AppTestCase(unittest.TestCase):
         self.assertIn("تسجيل الدخول".encode("utf-8"), response.data)
 
     def test_admin_can_login_and_export_attendance(self) -> None:
-        response = self.login("admin@competitive.local", "Admin@123")
+        response = self.login("aljawhara.ali@competitive.sa", "Admin@123")
         self.assertEqual(response.status_code, 200)
         csv_response = self.client.get("/attendance/export")
         self.assertEqual(csv_response.status_code, 200)
@@ -47,6 +47,19 @@ class AppTestCase(unittest.TestCase):
         response = self.client.get("/attendance/export", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("متاحة".encode("utf-8"), response.data)
+
+    def test_employee_can_register(self) -> None:
+        response = self.client.post(
+            "/register",
+            data={
+                "email": "new.employee@competitive.sa",
+                "password": "Employee@456",
+                "confirm_password": "Employee@456",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("تم إنشاء حساب الموظف بنجاح".encode("utf-8"), response.data)
 
 
 if __name__ == "__main__":

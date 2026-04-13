@@ -25,7 +25,7 @@ http://127.0.0.1:5000
 
 ## الحسابات الافتراضية
 
-- الإدمن: `admin@competitive.local` / `Admin@123`
+- الإدمن: `aljawhara.ali@competitive.sa` / `Admin@123`
 - الموظف: `ahmed@competitive.local` / `Employee@123`
 
 يفضل تغيير كلمات المرور قبل الاستخدام الفعلي.

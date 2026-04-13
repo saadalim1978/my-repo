@@ -10,14 +10,10 @@
         <span>منصة الموارد البشرية</span>
       </div>
     </div>
-    <h1>نسخة إنتاجية أولية لنظام الموارد البشرية</h1>
-    <p>
-      تسجيل دخول فعلي، قاعدة بيانات SQLite، وصلاحيات منفصلة للموظف والإدمن لإدارة الحضور والانصراف ومسيرات الرواتب.
-    </p>
-    <div class="demo-accounts">
-      <h2>حسابات تجريبية</h2>
-      <p><strong>الإدمن:</strong> admin@competitive.local / Admin@123</p>
-      <p><strong>الموظف:</strong> ahmed@competitive.local / Employee@123</p>
+    <h1>نظام الموارد البشرية</h1>
+    <div class="hero-title-box">
+      <h2>نظام الموارد البشرية</h2>
+      <p>منصة موحدة لإدارة الحضور والانصراف ومسيرات الرواتب بصلاحيات واضحة للموظفين والإدارة.</p>
     </div>
   </section>
 
@@ -34,6 +30,28 @@
       </label>
       <button type="submit" class="btn btn-primary wide">دخول إلى النظام</button>
     </form>
+
+    <div class="form-divider"><span>أو</span></div>
+
+    <div class="register-box">
+      <h3>تسجيل موظف جديد</h3>
+      <p>يمكن للموظف إنشاء حسابه باستخدام البريد الإلكتروني وكلمة مرور خاصة به.</p>
+      <form method="post" action="{{ url_for('register') }}" class="form-grid single">
+        <label class="field">
+          <span>البريد الإلكتروني</span>
+          <input type="email" name="email" placeholder="employee@competitive.sa" required>
+        </label>
+        <label class="field">
+          <span>كلمة المرور</span>
+          <input type="password" name="password" placeholder="8 أحرف أو أكثر" required>
+        </label>
+        <label class="field">
+          <span>تأكيد كلمة المرور</span>
+          <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور" required>
+        </label>
+        <button type="submit" class="btn btn-outline wide">إنشاء حساب موظف</button>
+      </form>
+    </div>
   </section>
 </main>
 {% endblock %}

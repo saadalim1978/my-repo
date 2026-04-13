@@ -90,6 +90,46 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         return render_template("login.html")
 
+    @app.post("/register")
+    def register() -> Response:
+        if g.user:
+            return redirect(url_for("dashboard"))
+
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not email or not password:
+            flash("الرجاء إدخال البريد الإلكتروني وكلمة المرور.", "error")
+            return redirect(url_for("login"))
+
+        if password != confirm_password:
+            flash("تأكيد كلمة المرور غير مطابق.", "error")
+            return redirect(url_for("login"))
+
+        if len(password) < 8:
+            flash("يجب أن تكون كلمة المرور 8 أحرف على الأقل.", "error")
+            return redirect(url_for("login"))
+
+        if query_one("SELECT id FROM users WHERE email = ?", (email,)):
+            flash("هذا البريد مسجل بالفعل. يمكنك تسجيل الدخول مباشرة.", "error")
+            return redirect(url_for("login"))
+
+        execute_db(
+            """
+            INSERT INTO users (full_name, email, password_hash, role, created_at)
+            VALUES (?, ?, ?, 'employee', ?)
+            """,
+            (
+                build_employee_name_from_email(email),
+                email,
+                generate_password_hash(password),
+                utcnow(),
+            ),
+        )
+        flash("تم إنشاء حساب الموظف بنجاح. يمكنك الآن تسجيل الدخول.", "success")
+        return redirect(url_for("login"))
+
     @app.route("/logout", methods=["POST"])
     def logout() -> Response:
         session.clear()
@@ -434,6 +474,7 @@ def init_db() -> None:
 
     if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         seed_users(db)
+    ensure_default_admin(db)
     if db.execute("SELECT COUNT(*) FROM attendance").fetchone()[0] == 0:
         seed_business_data(db)
 
@@ -443,7 +484,7 @@ def init_db() -> None:
 def seed_users(db: sqlite3.Connection) -> None:
     now = utcnow()
     users = [
-        ("مدير النظام", "admin@competitive.local", "Admin@123", "admin"),
+        ("الجوهرة علي", "aljawhara.ali@competitive.sa", "Admin@123", "admin"),
         ("أحمد علي", "ahmed@competitive.local", "Employee@123", "employee"),
         ("سارة خالد", "sara@competitive.local", "Employee@123", "employee"),
         ("محمد سالم", "mohammed@competitive.local", "Employee@123", "employee"),
@@ -455,6 +496,33 @@ def seed_users(db: sqlite3.Connection) -> None:
             for name, email, password, role in users
         ],
     )
+    db.commit()
+
+
+def ensure_default_admin(db: sqlite3.Connection) -> None:
+    admin = db.execute("SELECT id FROM users WHERE role = 'admin'").fetchone()
+    payload = (
+        "الجوهرة علي",
+        "aljawhara.ali@competitive.sa",
+        generate_password_hash("Admin@123"),
+    )
+    if admin:
+        db.execute(
+            """
+            UPDATE users
+            SET full_name = ?, email = ?, password_hash = ?, role = 'admin'
+            WHERE id = ?
+            """,
+            (*payload, admin["id"]),
+        )
+    else:
+        db.execute(
+            """
+            INSERT INTO users (full_name, email, password_hash, role, created_at)
+            VALUES (?, ?, ?, 'admin', ?)
+            """,
+            (*payload, utcnow()),
+        )
     db.commit()
 
 
@@ -516,6 +584,13 @@ def format_month_label(value: str) -> str:
         12: "ديسمبر",
     }
     return f"{month_names[dt.month]} {dt.year}"
+
+
+def build_employee_name_from_email(email: str) -> str:
+    local_part = email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
+    if not local_part:
+        return "موظف جديد"
+    return " ".join(word.capitalize() for word in local_part.split())
 
 
 def login_required(view):
