@@ -61,6 +61,34 @@ class AppTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("موظف تجريبي جديد".encode("utf-8"), response.data)
+        login_response = self.login("new.employee@competitive.sa", "Employee@456")
+        self.assertEqual(login_response.status_code, 200)
+        self.assertIn("لوحة تشغيل الموارد البشرية".encode("utf-8"), login_response.data)
+
+    def test_employee_can_reset_password(self) -> None:
+        self.client.post(
+            "/register",
+            data={
+                "full_name": "موظف إعادة تعيين",
+                "email": "reset.employee@competitive.sa",
+                "password": "Employee@456",
+                "confirm_password": "Employee@456",
+            },
+            follow_redirects=True,
+        )
+        response = self.client.post(
+            "/reset-password",
+            data={
+                "email": "reset.employee@competitive.sa",
+                "password": "Employee@789",
+                "confirm_password": "Employee@789",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        login_response = self.login("reset.employee@competitive.sa", "Employee@789")
+        self.assertEqual(login_response.status_code, 200)
+        self.assertIn("لوحة تشغيل الموارد البشرية".encode("utf-8"), login_response.data)
 
 
 if __name__ == "__main__":

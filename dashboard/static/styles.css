@@ -101,8 +101,8 @@ button, input, select { font: inherit; }
 }
 
 .brand-lockup img {
-  width: 102px;
-  height: 76px;
+  width: 132px;
+  height: 96px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.96);
   border-radius: 16px;
@@ -277,6 +277,31 @@ button, input, select { font: inherit; }
   color: var(--green-deep);
   line-height: 1.8;
   font-weight: 600;
+}
+
+.inline-messages {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.inline-flash {
+  position: static;
+  width: 100%;
+}
+
+.text-link {
+  margin-top: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--green-deep);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.hidden-panel {
+  display: none;
 }
 
 .topbar {

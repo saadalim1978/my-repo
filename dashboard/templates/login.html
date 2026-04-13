@@ -18,6 +18,16 @@
   </section>
 
   <section class="login-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="inline-messages">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }} inline-flash">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <h2>تسجيل الدخول</h2>
     <form method="post" class="form-grid single">
       <label class="field">
@@ -33,17 +43,13 @@
       </label>
       <button type="submit" class="btn btn-primary wide">دخول إلى النظام</button>
     </form>
+    <button type="button" class="text-link" data-toggle-panel="reset-password-panel">نسيت كلمة المرور؟</button>
 
     <div class="form-divider"><span>أو</span></div>
 
     <div class="register-box">
       <h3>تسجيل موظف جديد</h3>
       <p>يمكن للموظف إنشاء حسابه باستخدام البريد الإلكتروني وكلمة مرور خاصة به.</p>
-      {% with success_messages = get_flashed_messages(category_filter=['success']) %}
-        {% if success_messages %}
-          <div class="success-box">{{ success_messages[-1] }}</div>
-        {% endif %}
-      {% endwith %}
       <form method="post" action="{{ url_for('register') }}" class="form-grid single">
         <label class="field">
           <span>الاسم الكامل</span>
@@ -70,6 +76,32 @@
         <button type="submit" class="btn btn-outline wide">إنشاء حساب موظف</button>
       </form>
     </div>
+
+    <div class="register-box hidden-panel" id="reset-password-panel">
+      <h3>إعادة تعيين كلمة المرور</h3>
+      <p>أدخل بريدك الإلكتروني ثم عيّن كلمة مرور جديدة للدخول إلى النظام.</p>
+      <form method="post" action="{{ url_for('reset_password') }}" class="form-grid single">
+        <label class="field">
+          <span>البريد الإلكتروني</span>
+          <input type="email" name="email" placeholder="employee@email.com" required>
+        </label>
+        <label class="field password-field">
+          <span>كلمة المرور الجديدة</span>
+          <div class="password-control">
+            <input type="password" name="password" placeholder="أدخل كلمة المرور الجديدة" required data-password-input>
+            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+          </div>
+        </label>
+        <label class="field password-field">
+          <span>تأكيد كلمة المرور الجديدة</span>
+          <div class="password-control">
+            <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور الجديدة" required data-password-input>
+            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+          </div>
+        </label>
+        <button type="submit" class="btn btn-outline wide">تحديث كلمة المرور</button>
+      </form>
+    </div>
   </section>
 </main>
 <script>
@@ -79,6 +111,14 @@
       const showing = input.type === "text";
       input.type = showing ? "password" : "text";
       button.textContent = showing ? "إظهار" : "إخفاء";
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-panel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const panel = document.getElementById(button.dataset.togglePanel);
+      panel.classList.toggle("hidden-panel");
+      button.textContent = panel.classList.contains("hidden-panel") ? "نسيت كلمة المرور؟" : "إخفاء نموذج إعادة التعيين";
     });
   });
 </script>

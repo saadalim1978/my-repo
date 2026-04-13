@@ -131,6 +131,35 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         flash(f"تم إنشاء حساب الموظف {full_name} بنجاح. يمكنك الآن تسجيل الدخول مباشرة.", "success")
         return redirect(url_for("login"))
 
+    @app.post("/reset-password")
+    def reset_password() -> Response:
+        if g.user:
+            return redirect(url_for("dashboard"))
+
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not email or not password or not confirm_password:
+            flash("الرجاء إدخال البريد الإلكتروني وكلمة المرور الجديدة وتأكيدها.", "error")
+            return redirect(url_for("login"))
+
+        if password != confirm_password:
+            flash("تأكيد كلمة المرور الجديدة غير مطابق.", "error")
+            return redirect(url_for("login"))
+
+        user = query_one("SELECT id FROM users WHERE email = ?", (email,))
+        if not user:
+            flash("لا يوجد حساب مرتبط بهذا البريد الإلكتروني.", "error")
+            return redirect(url_for("login"))
+
+        execute_db(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(password), user["id"]),
+        )
+        flash("تم تحديث كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمتك الجديدة.", "success")
+        return redirect(url_for("login"))
+
     @app.route("/logout", methods=["POST"])
     def logout() -> Response:
         session.clear()
