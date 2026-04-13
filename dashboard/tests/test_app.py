@@ -47,6 +47,8 @@ class AppTestCase(unittest.TestCase):
         response = self.client.get("/attendance/export", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("متاحة".encode("utf-8"), response.data)
+        dashboard_response = self.client.get("/dashboard")
+        self.assertNotIn("موظفون".encode("utf-8"), dashboard_response.data)
 
     def test_employee_can_register(self) -> None:
         response = self.client.post(
@@ -89,6 +91,13 @@ class AppTestCase(unittest.TestCase):
         login_response = self.login("reset.employee@competitive.sa", "Employee@789")
         self.assertEqual(login_response.status_code, 200)
         self.assertIn("لوحة تشغيل الموارد البشرية".encode("utf-8"), login_response.data)
+
+    def test_payroll_download_is_pdf(self) -> None:
+        self.login("ahmed@competitive.local", "Employee@123")
+        response = self.client.get("/payroll/1/download")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/pdf", response.headers["Content-Type"])
+        self.assertTrue(response.data.startswith(b"%PDF"))
 
 
 if __name__ == "__main__":

@@ -27,10 +27,12 @@
       <p>النظام الآن يعمل بقاعدة بيانات فعلية وجلسات دخول وصلاحيات منفصلة. يمكنك إدارة سجلات الحضور والانصراف ومسيرات الرواتب من نفس الواجهة.</p>
     </div>
     <div class="stats-grid">
-      <div class="stat-card">
-        <strong>{{ dashboard_stats.employees }}</strong>
-        <span>موظفون</span>
-      </div>
+      {% if is_admin %}
+        <div class="stat-card">
+          <strong>{{ dashboard_stats.employees }}</strong>
+          <span>موظفون</span>
+        </div>
+      {% endif %}
       <div class="stat-card">
         <strong>{{ dashboard_stats.attendance_count }}</strong>
         <span>سجلات حضور</span>

@@ -10,6 +10,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
+import arabic_reshaper
+from bidi.algorithm import get_display
 from flask import (
     Flask,
     Response,
@@ -22,6 +24,11 @@ from flask import (
     session,
     url_for,
 )
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -31,6 +38,8 @@ DATA_ROOT = Path(
     or tempfile.gettempdir()
 )
 DATABASE_PATH = DATA_ROOT / "CompetitiveSolutionsHR" / "competitive_solutions.db"
+ARABIC_FONT_PATH = Path("C:/Windows/Fonts/arial.ttf")
+ARABIC_FONT_NAME = "ArabicArial"
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -45,6 +54,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
     app.teardown_appcontext(close_db)
+    register_pdf_font()
 
     @app.before_request
     def load_logged_in_user() -> None:
@@ -420,11 +430,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             flash("لا يمكنك تنزيل مسير راتب لموظف آخر.", "error")
             return redirect(url_for("dashboard"))
 
-        content = render_template("payslip.txt", payroll=payroll, format_currency=format_currency)
-        filename = f"payslip-{payroll['full_name'].replace(' ', '-')}-{payroll['month_label']}.txt"
+        pdf_bytes = build_payroll_pdf(payroll)
+        filename = f"payslip-{payroll['full_name'].replace(' ', '-')}-{payroll['month_label']}.pdf"
         return Response(
-            content,
-            mimetype="text/plain",
+            pdf_bytes,
+            mimetype="application/pdf",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
@@ -614,6 +624,67 @@ def format_month_label(value: str) -> str:
         12: "ديسمبر",
     }
     return f"{month_names[dt.month]} {dt.year}"
+
+
+def register_pdf_font() -> None:
+    if ARABIC_FONT_NAME not in pdfmetrics.getRegisteredFontNames() and ARABIC_FONT_PATH.exists():
+        pdfmetrics.registerFont(TTFont(ARABIC_FONT_NAME, str(ARABIC_FONT_PATH)))
+
+
+def shape_arabic(text: str) -> str:
+    return get_display(arabic_reshaper.reshape(text))
+
+
+def draw_rtl_text(pdf: canvas.Canvas, text: str, x: float, y: float, font_size: int = 12) -> None:
+    pdf.setFont(ARABIC_FONT_NAME, font_size)
+    pdf.drawRightString(x, y, shape_arabic(text))
+
+
+def build_payroll_pdf(payroll: sqlite3.Row) -> bytes:
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    logo_path = BASE_DIR / "static" / "company-logo.jpeg"
+
+    pdf.setTitle(f"Payslip {payroll['full_name']} {payroll['month_label']}")
+
+    pdf.setFillColorRGB(0.12, 0.33, 0.27)
+    pdf.roundRect(40, height - 180, width - 80, 120, 18, stroke=0, fill=1)
+    pdf.setFillColorRGB(1, 1, 1)
+    draw_rtl_text(pdf, "شركة الحلول التنافسية", width - 80, height - 95, 20)
+    draw_rtl_text(pdf, "مسير راتب الموظف", width - 80, height - 125, 14)
+
+    if logo_path.exists():
+        pdf.drawImage(ImageReader(str(logo_path)), 55, height - 155, width=90, height=65, mask="auto")
+
+    pdf.setFillColorRGB(0.08, 0.08, 0.08)
+    draw_rtl_text(pdf, f"اسم الموظف: {payroll['full_name']}", width - 60, height - 220, 14)
+    draw_rtl_text(pdf, f"الشهر: {format_month_label(payroll['month_label'])}", width - 60, height - 250, 14)
+
+    rows = [
+        ("الراتب الأساسي", format_currency(payroll["base_salary"])),
+        ("بدل السكن", format_currency(payroll["housing_allowance"])),
+        ("بدل النقل", format_currency(payroll["transport_allowance"])),
+        ("خصم التأمينات", format_currency(payroll["insurance_deduction"])),
+        ("صافي الراتب", format_currency(payroll["net_salary"])),
+    ]
+
+    top = height - 310
+    row_height = 42
+    for index, (label, value) in enumerate(rows):
+        y = top - (index * row_height)
+        pdf.setFillColorRGB(0.96, 0.95, 0.92 if index % 2 == 0 else 0.98)
+        pdf.roundRect(55, y - 18, width - 110, 32, 10, stroke=0, fill=1)
+        pdf.setFillColorRGB(0.09, 0.27, 0.21)
+        draw_rtl_text(pdf, label, width - 75, y, 12)
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(80, y, value)
+
+    pdf.setFillColorRGB(0.42, 0.39, 0.34)
+    draw_rtl_text(pdf, "تم إصدار هذا المسير من نظام الموارد البشرية - شركة الحلول التنافسية", width - 60, 90, 11)
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
 
 
 def login_required(view):
