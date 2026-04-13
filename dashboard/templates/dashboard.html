@@ -187,7 +187,7 @@
               <h3>{{ current_payroll.full_name }}</h3>
               <span>{{ format_month_label(current_payroll.month_label) }}</span>
             </div>
-            <a class="btn btn-outline" href="{{ url_for('download_payroll', payroll_id=current_payroll.id) }}">تنزيل المسير</a>
+            <a class="btn btn-outline" href="{{ url_for('download_payroll', payroll_id=current_payroll.id) }}" target="_blank" rel="noopener">فتح المسير</a>
           </div>
           <div class="slip-grid">
             <div><span>الراتب الأساسي</span><strong>{{ format_currency(current_payroll.base_salary) }}</strong></div>
@@ -220,7 +220,7 @@
                 <td>{{ payroll.full_name }}</td>
                 <td>{{ format_month_label(payroll.month_label) }}</td>
                 <td>{{ format_currency(payroll.net_salary) }}</td>
-                <td><a class="mini-btn" href="{{ url_for('download_payroll', payroll_id=payroll.id) }}">تحميل</a></td>
+                <td><a class="mini-btn" href="{{ url_for('download_payroll', payroll_id=payroll.id) }}" target="_blank" rel="noopener">فتح</a></td>
               </tr>
             {% else %}
               <tr>
