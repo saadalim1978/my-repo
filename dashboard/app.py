@@ -491,6 +491,30 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         return redirect(url_for("dashboard", employee_id=user_id))
 
+    @app.post("/payroll/<int:payroll_id>/delete")
+    @login_required
+    @admin_required
+    def delete_payroll(payroll_id: int) -> Response:
+        payroll = query_one(
+            """
+            SELECT payrolls.id, payrolls.user_id, payrolls.month_label, users.full_name
+            FROM payrolls
+            JOIN users ON users.id = payrolls.user_id
+            WHERE payrolls.id = ?
+            """,
+            (payroll_id,),
+        )
+        if not payroll:
+            flash("مسير الراتب غير موجود.", "error")
+            return redirect(url_for("dashboard"))
+
+        execute_db("DELETE FROM payrolls WHERE id = ?", (payroll_id,))
+        flash(
+            f"تم حذف مسير راتب {payroll['full_name']} لشهر {format_month_label(payroll['month_label'])}.",
+            "success",
+        )
+        return redirect(url_for("dashboard", employee_id=payroll["user_id"]))
+
     @app.get("/payroll/<int:payroll_id>/download")
     @login_required
     def download_payroll(payroll_id: int) -> Response:

@@ -203,7 +203,14 @@
               <h3>{{ current_payroll.full_name }}</h3>
               <span>{{ format_month_label(current_payroll.month_label) }}</span>
             </div>
-            <a class="btn btn-outline" href="{{ url_for('download_payroll', payroll_id=current_payroll.id) }}" target="_blank" rel="noopener">فتح المسير</a>
+            <div class="topbar-actions">
+              <a class="btn btn-outline" href="{{ url_for('download_payroll', payroll_id=current_payroll.id) }}" target="_blank" rel="noopener">فتح المسير</a>
+              {% if is_admin %}
+                <form method="post" action="{{ url_for('delete_payroll', payroll_id=current_payroll.id) }}">
+                  <button type="submit" class="btn btn-outline">حذف المسير</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
           <div class="slip-grid">
             <div><span>الراتب الأساسي</span><strong>{{ format_currency(current_payroll.base_salary) }}</strong></div>
@@ -227,7 +234,8 @@
               <th>الموظف</th>
               <th>الشهر</th>
               <th>الصافي</th>
-              <th>تنزيل</th>
+              <th>فتح</th>
+              {% if is_admin %}<th>حذف</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -237,10 +245,17 @@
                 <td>{{ format_month_label(payroll.month_label) }}</td>
                 <td>{{ format_currency(payroll.net_salary) }}</td>
                 <td><a class="mini-btn" href="{{ url_for('download_payroll', payroll_id=payroll.id) }}" target="_blank" rel="noopener">فتح</a></td>
+                {% if is_admin %}
+                  <td>
+                    <form method="post" action="{{ url_for('delete_payroll', payroll_id=payroll.id) }}">
+                      <button type="submit" class="mini-btn delete">حذف</button>
+                    </form>
+                  </td>
+                {% endif %}
               </tr>
             {% else %}
               <tr>
-                <td colspan="4">لا توجد مسيرات محفوظة.</td>
+                <td colspan="{{ 5 if is_admin else 4 }}">لا توجد مسيرات محفوظة.</td>
               </tr>
             {% endfor %}
           </tbody>
