@@ -95,12 +95,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if g.user:
             return redirect(url_for("dashboard"))
 
+        full_name = request.form.get("full_name", "").strip()
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if not email or not password:
-            flash("الرجاء إدخال البريد الإلكتروني وكلمة المرور.", "error")
+        if not full_name or not email or not password:
+            flash("الرجاء إدخال الاسم الكامل والبريد الإلكتروني وكلمة المرور.", "error")
             return redirect(url_for("login"))
 
         if password != confirm_password:
@@ -121,13 +122,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             VALUES (?, ?, ?, 'employee', ?)
             """,
             (
-                build_employee_name_from_email(email),
+                full_name,
                 email,
                 generate_password_hash(password),
                 utcnow(),
             ),
         )
-        flash("تم إنشاء حساب الموظف بنجاح. يمكنك الآن تسجيل الدخول.", "success")
+        flash(f"تم إنشاء حساب الموظف {full_name} بنجاح. يمكنك الآن تسجيل الدخول مباشرة.", "success")
         return redirect(url_for("login"))
 
     @app.route("/logout", methods=["POST"])
@@ -584,13 +585,6 @@ def format_month_label(value: str) -> str:
         12: "ديسمبر",
     }
     return f"{month_names[dt.month]} {dt.year}"
-
-
-def build_employee_name_from_email(email: str) -> str:
-    local_part = email.split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
-    if not local_part:
-        return "موظف جديد"
-    return " ".join(word.capitalize() for word in local_part.split())
 
 
 def login_required(view):

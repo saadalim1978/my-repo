@@ -24,9 +24,12 @@
         <span>البريد الإلكتروني</span>
         <input type="email" name="email" placeholder="name@company.com" required>
       </label>
-      <label class="field">
+      <label class="field password-field">
         <span>كلمة المرور</span>
-        <input type="password" name="password" placeholder="********" required>
+        <div class="password-control">
+          <input type="password" name="password" placeholder="********" required data-password-input>
+          <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+        </div>
       </label>
       <button type="submit" class="btn btn-primary wide">دخول إلى النظام</button>
     </form>
@@ -36,22 +39,47 @@
     <div class="register-box">
       <h3>تسجيل موظف جديد</h3>
       <p>يمكن للموظف إنشاء حسابه باستخدام البريد الإلكتروني وكلمة مرور خاصة به.</p>
+      {% with success_messages = get_flashed_messages(category_filter=['success']) %}
+        {% if success_messages %}
+          <div class="success-box">{{ success_messages[-1] }}</div>
+        {% endif %}
+      {% endwith %}
       <form method="post" action="{{ url_for('register') }}" class="form-grid single">
         <label class="field">
+          <span>الاسم الكامل</span>
+          <input type="text" name="full_name" placeholder="مثال: محمد أحمد علي" required>
+        </label>
+        <label class="field">
           <span>البريد الإلكتروني</span>
-          <input type="email" name="email" placeholder="employee@competitive.sa" required>
+          <input type="email" name="email" placeholder="employee@email.com" required>
         </label>
-        <label class="field">
+        <label class="field password-field">
           <span>كلمة المرور</span>
-          <input type="password" name="password" placeholder="8 أحرف أو أكثر" required>
+          <div class="password-control">
+            <input type="password" name="password" placeholder="8 أحرف أو أكثر" required data-password-input>
+            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+          </div>
         </label>
-        <label class="field">
+        <label class="field password-field">
           <span>تأكيد كلمة المرور</span>
-          <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور" required>
+          <div class="password-control">
+            <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور" required data-password-input>
+            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+          </div>
         </label>
         <button type="submit" class="btn btn-outline wide">إنشاء حساب موظف</button>
       </form>
     </div>
   </section>
 </main>
+<script>
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = button.parentElement.querySelector("[data-password-input]");
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      button.textContent = showing ? "إظهار" : "إخفاء";
+    });
+  });
+</script>
 {% endblock %}

@@ -52,6 +52,7 @@ class AppTestCase(unittest.TestCase):
         response = self.client.post(
             "/register",
             data={
+                "full_name": "موظف تجريبي جديد",
                 "email": "new.employee@competitive.sa",
                 "password": "Employee@456",
                 "confirm_password": "Employee@456",
@@ -59,7 +60,7 @@ class AppTestCase(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn("تم إنشاء حساب الموظف بنجاح".encode("utf-8"), response.data)
+        self.assertIn("موظف تجريبي جديد".encode("utf-8"), response.data)
 
 
 if __name__ == "__main__":
