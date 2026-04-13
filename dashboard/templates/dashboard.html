@@ -24,7 +24,7 @@
   <section class="hero-card">
     <div>
       <h1>لوحة تشغيل الموارد البشرية</h1>
-      <p>النظام الآن يعمل بقاعدة بيانات فعلية وجلسات دخول وصلاحيات منفصلة. يمكنك إدارة سجلات الحضور والانصراف ومسيرات الرواتب من نفس الواجهة.</p>
+      <p>النظام الآن يعمل بقاعدة بيانات فعلية وجلسات دخول وصلاحيات منفصلة. يمكنك إدارة الحضور والانصراف ومسيرات الرواتب من واجهة واحدة قابلة للتوسع.</p>
     </div>
     <div class="stats-grid">
       {% if is_admin %}
@@ -35,7 +35,7 @@
       {% endif %}
       <div class="stat-card">
         <strong>{{ dashboard_stats.attendance_count }}</strong>
-        <span>سجلات حضور</span>
+        <span>أيام حضور معروضة</span>
       </div>
       <div class="stat-card">
         <strong>{{ dashboard_stats.today_count }}</strong>
@@ -53,11 +53,8 @@
       <div class="section-head">
         <div>
           <h2>الحضور والانصراف</h2>
-          <p>{{ "يمكن للإدمن إضافة أو تعديل أو حذف السجلات وتصديرها." if is_admin else "يمكنك تسجيل دخولك وخروجك ومراجعة سجلاتك الخاصة." }}</p>
+          <p>{{ "يمكن للإدمن إدارة السجلات بحسب اليوم أو الأسبوع أو الشهر مع التصدير والحذف الجماعي." if is_admin else "يمكنك تسجيل دخولك وخروجك ومراجعة سجلك اليومي بحسب التاريخ." }}</p>
         </div>
-        {% if is_admin %}
-          <a class="btn btn-outline" href="{{ url_for('export_attendance') }}">تنزيل CSV</a>
-        {% endif %}
       </div>
 
       <form method="post" action="{{ url_for('create_attendance') }}" class="form-grid">
@@ -85,48 +82,65 @@
         <button type="submit" class="btn btn-primary">{{ "إضافة سجل" if is_admin else "تسجيل العملية" }}</button>
       </form>
 
+      <form method="get" action="{{ url_for('dashboard') }}" class="form-grid">
+        <label class="field">
+          <span>عرض السجل بحسب</span>
+          <select name="attendance_period">
+            <option value="day" {% if attendance_period == 'day' %}selected{% endif %}>يوم</option>
+            <option value="week" {% if attendance_period == 'week' %}selected{% endif %}>أسبوع</option>
+            <option value="month" {% if attendance_period == 'month' %}selected{% endif %}>شهر</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>التاريخ المرجعي</span>
+          <input type="date" name="attendance_date" value="{{ attendance_date }}" required>
+        </label>
+        {% if is_admin and selected_employee_id %}
+          <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
+        {% endif %}
+        <button type="submit" class="btn btn-outline">تحديث العرض</button>
+      </form>
+
+      {% if is_admin %}
+        <div class="section-head">
+          <div>
+            <h3>أدوات إدارة السجل</h3>
+            <p>يتم تطبيق التصدير والحذف على الفترة المحددة في المرشح أعلاه.</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="btn btn-outline" href="{{ url_for('export_attendance', **export_query) }}">تنزيل CSV</a>
+            <form method="post" action="{{ url_for('delete_attendance_range') }}">
+              <input type="hidden" name="attendance_period" value="{{ attendance_period }}">
+              <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
+              <button type="submit" class="btn btn-outline">حذف الفترة المعروضة</button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>الموظف</th>
-              <th>العملية</th>
-              <th>التاريخ والوقت</th>
-              {% if is_admin %}<th>تعديل مباشر</th><th>حذف</th>{% endif %}
+              <th>التاريخ</th>
+              <th>سجل الدخول</th>
+              <th>سجل الخروج</th>
+              <th>عدد الحركات</th>
             </tr>
           </thead>
           <tbody>
-            {% for record in attendance_records %}
+            {% for record in attendance_summary %}
               <tr>
                 <td>{{ record.full_name }}</td>
-                <td><span class="pill {{ 'in' if record.action == 'دخول' else 'out' }}">{{ record.action }}</span></td>
-                <td>{{ record.recorded_at }}</td>
-                {% if is_admin %}
-                  <td>
-                    <form method="post" action="{{ url_for('update_attendance', attendance_id=record.id) }}" class="table-form">
-                      <select name="user_id" required>
-                        {% for user in users %}
-                          <option value="{{ user.id }}" {% if user.full_name == record.full_name %}selected{% endif %}>{{ user.full_name }}</option>
-                        {% endfor %}
-                      </select>
-                      <select name="action" required>
-                        <option value="دخول" {% if record.action == 'دخول' %}selected{% endif %}>دخول</option>
-                        <option value="خروج" {% if record.action == 'خروج' %}selected{% endif %}>خروج</option>
-                      </select>
-                      <input type="datetime-local" name="recorded_at" value="{{ record.recorded_at }}" required>
-                      <button type="submit" class="mini-btn">حفظ</button>
-                    </form>
-                  </td>
-                  <td>
-                    <form method="post" action="{{ url_for('delete_attendance', attendance_id=record.id) }}">
-                      <button type="submit" class="mini-btn delete">حذف</button>
-                    </form>
-                  </td>
-                {% endif %}
+                <td>{{ record.attendance_date }}</td>
+                <td>{{ record.first_check_in or "-" }}</td>
+                <td>{{ record.last_check_out or "-" }}</td>
+                <td>{{ record.event_count }}</td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="{{ 5 if is_admin else 3 }}">لا توجد سجلات حالياً.</td>
+                <td colspan="5">لا توجد سجلات للفترة المحددة.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -138,7 +152,7 @@
       <div class="section-head">
         <div>
           <h2>مسيرات الرواتب</h2>
-          <p>{{ "الإدمن يدير المسيرات لكل موظف، والموظف يستطيع تنزيل مسيره الخاص." if is_admin else "تستطيع مراجعة آخر مسير راتب لك وتنزيله." }}</p>
+          <p>{{ "الإدمن يدير المسيرات لكل موظف، والموظف يستطيع فتح مسيره الخاص." if is_admin else "تستطيع مراجعة آخر مسير راتب لك وفتحه للطباعة أو الحفظ." }}</p>
         </div>
       </div>
 
@@ -152,6 +166,8 @@
               {% endfor %}
             </select>
           </label>
+          <input type="hidden" name="attendance_period" value="{{ attendance_period }}">
+          <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
         </form>
 
         <form method="post" action="{{ url_for('save_payroll') }}" class="form-grid">
@@ -230,6 +246,44 @@
           </tbody>
         </table>
       </div>
+
+      {% if is_admin %}
+        <div class="section-head">
+          <div>
+            <h2>إدارة حسابات الموظفين</h2>
+            <p>يمكنك حذف حساب الموظف بالكامل مع سجلاته عند الحاجة.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap compact">
+          <table>
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>البريد الإلكتروني</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in users %}
+                <tr>
+                  <td>{{ user.full_name }}</td>
+                  <td>{{ user.email }}</td>
+                  <td>
+                    <form method="post" action="{{ url_for('delete_employee', user_id=user.id) }}">
+                      <button type="submit" class="mini-btn delete">حذف الحساب</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="3">لا توجد حسابات موظفين للإدارة.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
     </div>
   </section>
 </main>

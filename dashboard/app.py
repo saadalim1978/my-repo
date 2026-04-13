@@ -5,7 +5,7 @@ import io
 import os
 import sqlite3
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -172,15 +172,38 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         users = query_all(
             "SELECT id, full_name, email, role FROM users WHERE role = 'employee' ORDER BY full_name"
         )
+        attendance_period = request.args.get("attendance_period", "day").strip() or "day"
+        if attendance_period not in {"day", "week", "month"}:
+            attendance_period = "day"
+        attendance_date = request.args.get("attendance_date", datetime.now().strftime("%Y-%m-%d")).strip()
+        try:
+            anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+        except ValueError:
+            anchor_date = date.today()
+            attendance_date = anchor_date.isoformat()
+        range_start, range_end = get_attendance_range(anchor_date, attendance_period)
+        export_query = {
+            "attendance_period": attendance_period,
+            "attendance_date": attendance_date,
+        }
 
         if is_admin():
-            attendance_records = query_all(
+            attendance_summary = query_all(
                 """
-                SELECT attendance.id, attendance.action, attendance.recorded_at, users.full_name
+                SELECT
+                    users.id AS user_id,
+                    users.full_name,
+                    DATE(attendance.recorded_at) AS attendance_date,
+                    MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out,
+                    COUNT(*) AS event_count
                 FROM attendance
                 JOIN users ON users.id = attendance.user_id
-                ORDER BY attendance.recorded_at DESC
-                """
+                WHERE attendance.recorded_at >= ? AND attendance.recorded_at < ?
+                GROUP BY users.id, DATE(attendance.recorded_at)
+                ORDER BY attendance_date DESC, users.full_name
+                """,
+                (range_start, range_end),
             )
             payroll_records = query_all(
                 """
@@ -194,15 +217,22 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             if not selected_employee_id and users:
                 selected_employee_id = users[0]["id"]
         else:
-            attendance_records = query_all(
+            attendance_summary = query_all(
                 """
-                SELECT attendance.id, attendance.action, attendance.recorded_at, users.full_name
+                SELECT
+                    users.id AS user_id,
+                    users.full_name,
+                    DATE(attendance.recorded_at) AS attendance_date,
+                    MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out,
+                    COUNT(*) AS event_count
                 FROM attendance
                 JOIN users ON users.id = attendance.user_id
-                WHERE attendance.user_id = ?
-                ORDER BY attendance.recorded_at DESC
+                WHERE attendance.user_id = ? AND attendance.recorded_at >= ? AND attendance.recorded_at < ?
+                GROUP BY users.id, DATE(attendance.recorded_at)
+                ORDER BY attendance_date DESC, users.full_name
                 """,
-                (g.user["id"],),
+                (g.user["id"], range_start, range_end),
             )
             payroll_records = query_all(
                 """
@@ -232,10 +262,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         dashboard_stats = {
             "employees": len(users),
-            "attendance_count": len(attendance_records),
+            "attendance_count": len(attendance_summary),
             "today_count": sum(
-                record["recorded_at"].startswith(datetime.now().strftime("%Y-%m-%d"))
-                for record in attendance_records
+                row["attendance_date"] == date.today().isoformat()
+                for row in attendance_summary
             ),
             "payroll_count": len(payroll_records),
         }
@@ -243,12 +273,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return render_template(
             "dashboard.html",
             users=users,
-            attendance_records=attendance_records,
+            attendance_summary=attendance_summary,
             payroll_records=payroll_records,
             current_payroll=current_payroll,
             selected_employee_id=selected_employee_id,
             dashboard_stats=dashboard_stats,
             is_admin=is_admin(),
+            attendance_period=attendance_period,
+            attendance_date=attendance_date,
+            export_query=export_query,
         )
 
     @app.post("/attendance/create")
@@ -308,31 +341,89 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         flash("تم حذف السجل.", "success")
         return redirect(url_for("dashboard"))
 
+    @app.post("/attendance/delete-range")
+    @login_required
+    @admin_required
+    def delete_attendance_range() -> Response:
+        attendance_period = request.form.get("attendance_period", "day").strip()
+        attendance_date = request.form.get("attendance_date", "").strip()
+        try:
+            anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+        except ValueError:
+            flash("تاريخ الحذف غير صحيح.", "error")
+            return redirect(url_for("dashboard"))
+
+        range_start, range_end = get_attendance_range(anchor_date, attendance_period)
+        deleted_count = execute_db_count(
+            "DELETE FROM attendance WHERE recorded_at >= ? AND recorded_at < ?",
+            (range_start, range_end),
+        )
+        flash(f"تم حذف {deleted_count} من سجلات الحضور والانصراف للفترة المحددة.", "success")
+        return redirect(
+            url_for(
+                "dashboard",
+                attendance_period=attendance_period,
+                attendance_date=attendance_date,
+            )
+        )
+
     @app.get("/attendance/export")
     @login_required
     @admin_required
     def export_attendance() -> Response:
+        attendance_period = request.args.get("attendance_period", "day").strip()
+        attendance_date = request.args.get("attendance_date", datetime.now().strftime("%Y-%m-%d")).strip()
+        try:
+            anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+        except ValueError:
+            anchor_date = date.today()
+            attendance_date = anchor_date.isoformat()
+        range_start, range_end = get_attendance_range(anchor_date, attendance_period)
         rows = query_all(
             """
-            SELECT users.full_name, attendance.action, attendance.recorded_at
+            SELECT
+                users.full_name,
+                DATE(attendance.recorded_at) AS attendance_date,
+                MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
             FROM attendance
             JOIN users ON users.id = attendance.user_id
-            ORDER BY attendance.recorded_at DESC
-            """
+            WHERE attendance.recorded_at >= ? AND attendance.recorded_at < ?
+            GROUP BY users.id, DATE(attendance.recorded_at)
+            ORDER BY attendance_date DESC, users.full_name
+            """,
+            (range_start, range_end),
         )
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(["اسم الموظف", "العملية", "التاريخ والوقت"])
+        writer.writerow(["اسم الموظف", "التاريخ", "وقت الدخول", "وقت الخروج"])
         for row in rows:
-            writer.writerow([row["full_name"], row["action"], row["recorded_at"]])
+            writer.writerow([
+                row["full_name"],
+                row["attendance_date"],
+                row["first_check_in"] or "-",
+                row["last_check_out"] or "-",
+            ])
 
         return Response(
-            buffer.getvalue(),
-            mimetype="text/csv",
+            ("\ufeff" + buffer.getvalue()).encode("utf-16le"),
+            mimetype="text/csv; charset=utf-16",
             headers={
                 "Content-Disposition": "attachment; filename=attendance-records.csv"
             },
         )
+
+    @app.post("/employees/<int:user_id>/delete")
+    @login_required
+    @admin_required
+    def delete_employee(user_id: int) -> Response:
+        employee = query_one("SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'", (user_id,))
+        if not employee:
+            flash("الموظف غير موجود أو لا يمكن حذفه.", "error")
+            return redirect(url_for("dashboard"))
+        execute_db("DELETE FROM users WHERE id = ?", (user_id,))
+        flash(f"تم حذف حساب الموظف {employee['full_name']} وجميع سجلاته.", "success")
+        return redirect(url_for("dashboard"))
 
     @app.post("/payroll/save")
     @login_required
@@ -435,6 +526,7 @@ def get_db() -> sqlite3.Connection:
     if "db" not in g:
         g.db = sqlite3.connect(current_app.config["DATABASE"])
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
 def close_db(_: Any = None) -> None:
@@ -457,9 +549,17 @@ def execute_db(query: str, params: tuple[Any, ...] = ()) -> None:
     db.commit()
 
 
+def execute_db_count(query: str, params: tuple[Any, ...] = ()) -> int:
+    db = get_db()
+    cursor = db.execute(query, params)
+    db.commit()
+    return cursor.rowcount
+
+
 def init_db() -> None:
     db = sqlite3.connect(current_app.config["DATABASE"])
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
     db.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -611,6 +711,25 @@ def format_month_label(value: str) -> str:
         12: "ديسمبر",
     }
     return f"{month_names[dt.month]} {dt.year}"
+
+
+def get_attendance_range(anchor_date: date, period: str) -> tuple[str, str]:
+    start = anchor_date
+    if period == "week":
+        start = anchor_date - timedelta(days=anchor_date.weekday())
+        end = start + timedelta(days=7)
+    elif period == "month":
+        start = anchor_date.replace(day=1)
+        if start.month == 12:
+            end = start.replace(year=start.year + 1, month=1)
+        else:
+            end = start.replace(month=start.month + 1)
+    else:
+        end = start + timedelta(days=1)
+    return (
+        datetime.combine(start, datetime.min.time()).strftime("%Y-%m-%dT%H:%M"),
+        datetime.combine(end, datetime.min.time()).strftime("%Y-%m-%dT%H:%M"),
+    )
 
 
 def login_required(view):
