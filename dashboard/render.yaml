@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: competitive-solutions-hr
+    env: python
+    plan: free
+    rootDir: dashboard
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true

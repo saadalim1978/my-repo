@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.db
+*.db-journal
+.pytest_cache/
+.venv/
+env/
+venv/
+dashboard/instance/
+dashboard/__pycache__/
+dashboard/tests/__pycache__/
+dashboard/competitive_solutions.db
+dashboard/competitive_solutions.db-journal
+dashboard/smoke.db
+dashboard/smoke.db-journal

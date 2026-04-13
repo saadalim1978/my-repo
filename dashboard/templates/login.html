@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}تسجيل الدخول | شركة الحلول التنافسية{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-hero">
+    <div class="brand-lockup">
+      <img src="{{ url_for('static', filename='company-logo.jpeg') }}" alt="شعار شركة الحلول التنافسية">
+      <div>
+        <strong>COMPETITIVE SOLUTIONS CO.</strong>
+        <span>منصة الموارد البشرية</span>
+      </div>
+    </div>
+    <h1>نسخة إنتاجية أولية لنظام الموارد البشرية</h1>
+    <p>
+      تسجيل دخول فعلي، قاعدة بيانات SQLite، وصلاحيات منفصلة للموظف والإدمن لإدارة الحضور والانصراف ومسيرات الرواتب.
+    </p>
+    <div class="demo-accounts">
+      <h2>حسابات تجريبية</h2>
+      <p><strong>الإدمن:</strong> admin@competitive.local / Admin@123</p>
+      <p><strong>الموظف:</strong> ahmed@competitive.local / Employee@123</p>
+    </div>
+  </section>
+
+  <section class="login-card">
+    <h2>تسجيل الدخول</h2>
+    <form method="post" class="form-grid single">
+      <label class="field">
+        <span>البريد الإلكتروني</span>
+        <input type="email" name="email" placeholder="name@company.com" required>
+      </label>
+      <label class="field">
+        <span>كلمة المرور</span>
+        <input type="password" name="password" placeholder="********" required>
+      </label>
+      <button type="submit" class="btn btn-primary wide">دخول إلى النظام</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,10 @@
+شركة الحلول التنافسية
+Competitive Solutions Co.
+
+اسم الموظف: {{ payroll.full_name }}
+الشهر: {{ payroll.month_label }}
+الراتب الأساسي: {{ format_currency(payroll.base_salary) }}
+بدل السكن: {{ format_currency(payroll.housing_allowance) }}
+بدل النقل: {{ format_currency(payroll.transport_allowance) }}
+خصم التأمينات: {{ format_currency(payroll.insurance_deduction) }}
+صافي الراتب: {{ format_currency(payroll.net_salary) }}

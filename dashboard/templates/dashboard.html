@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم | شركة الحلول التنافسية{% endblock %}
+{% block body %}
+<main class="app-shell">
+  <section class="topbar">
+    <div class="brand-lockup">
+      <img src="{{ url_for('static', filename='company-logo.jpeg') }}" alt="شعار شركة الحلول التنافسية">
+      <div>
+        <strong>شركة الحلول التنافسية</strong>
+        <span>منصة ERP للموارد البشرية</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="user-badge">
+        <strong>{{ g.user.full_name }}</strong>
+        <span>{{ "إدمن" if is_admin else "موظف" }}</span>
+      </div>
+      <form method="post" action="{{ url_for('logout') }}">
+        <button type="submit" class="btn btn-outline">تسجيل الخروج</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="hero-card">
+    <div>
+      <h1>لوحة تشغيل الموارد البشرية</h1>
+      <p>النظام الآن يعمل بقاعدة بيانات فعلية وجلسات دخول وصلاحيات منفصلة. يمكنك إدارة سجلات الحضور والانصراف ومسيرات الرواتب من نفس الواجهة.</p>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <strong>{{ dashboard_stats.employees }}</strong>
+        <span>موظفون</span>
+      </div>
+      <div class="stat-card">
+        <strong>{{ dashboard_stats.attendance_count }}</strong>
+        <span>سجلات حضور</span>
+      </div>
+      <div class="stat-card">
+        <strong>{{ dashboard_stats.today_count }}</strong>
+        <span>سجلات اليوم</span>
+      </div>
+      <div class="stat-card">
+        <strong>{{ dashboard_stats.payroll_count }}</strong>
+        <span>مسيرات رواتب</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="content-grid">
+    <div class="panel">
+      <div class="section-head">
+        <div>
+          <h2>الحضور والانصراف</h2>
+          <p>{{ "يمكن للإدمن إضافة أو تعديل أو حذف السجلات وتصديرها." if is_admin else "يمكنك تسجيل دخولك وخروجك ومراجعة سجلاتك الخاصة." }}</p>
+        </div>
+        {% if is_admin %}
+          <a class="btn btn-outline" href="{{ url_for('export_attendance') }}">تنزيل CSV</a>
+        {% endif %}
+      </div>
+
+      <form method="post" action="{{ url_for('create_attendance') }}" class="form-grid">
+        {% if is_admin %}
+          <label class="field">
+            <span>الموظف</span>
+            <select name="user_id" required>
+              {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        {% endif %}
+        <label class="field">
+          <span>العملية</span>
+          <select name="action" required>
+            <option value="دخول">دخول</option>
+            <option value="خروج">خروج</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>التاريخ والوقت</span>
+          <input type="datetime-local" name="recorded_at" value="{{ now_iso_local }}" required>
+        </label>
+        <button type="submit" class="btn btn-primary">{{ "إضافة سجل" if is_admin else "تسجيل العملية" }}</button>
+      </form>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الموظف</th>
+              <th>العملية</th>
+              <th>التاريخ والوقت</th>
+              {% if is_admin %}<th>تعديل مباشر</th><th>حذف</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in attendance_records %}
+              <tr>
+                <td>{{ record.full_name }}</td>
+                <td><span class="pill {{ 'in' if record.action == 'دخول' else 'out' }}">{{ record.action }}</span></td>
+                <td>{{ record.recorded_at }}</td>
+                {% if is_admin %}
+                  <td>
+                    <form method="post" action="{{ url_for('update_attendance', attendance_id=record.id) }}" class="table-form">
+                      <select name="user_id" required>
+                        {% for user in users %}
+                          <option value="{{ user.id }}" {% if user.full_name == record.full_name %}selected{% endif %}>{{ user.full_name }}</option>
+                        {% endfor %}
+                      </select>
+                      <select name="action" required>
+                        <option value="دخول" {% if record.action == 'دخول' %}selected{% endif %}>دخول</option>
+                        <option value="خروج" {% if record.action == 'خروج' %}selected{% endif %}>خروج</option>
+                      </select>
+                      <input type="datetime-local" name="recorded_at" value="{{ record.recorded_at }}" required>
+                      <button type="submit" class="mini-btn">حفظ</button>
+                    </form>
+                  </td>
+                  <td>
+                    <form method="post" action="{{ url_for('delete_attendance', attendance_id=record.id) }}">
+                      <button type="submit" class="mini-btn delete">حذف</button>
+                    </form>
+                  </td>
+                {% endif %}
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="{{ 5 if is_admin else 3 }}">لا توجد سجلات حالياً.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-head">
+        <div>
+          <h2>مسيرات الرواتب</h2>
+          <p>{{ "الإدمن يدير المسيرات لكل موظف، والموظف يستطيع تنزيل مسيره الخاص." if is_admin else "تستطيع مراجعة آخر مسير راتب لك وتنزيله." }}</p>
+        </div>
+      </div>
+
+      {% if is_admin %}
+        <form method="get" action="{{ url_for('dashboard') }}" class="filter-row">
+          <label class="field">
+            <span>الموظف المعروض</span>
+            <select name="employee_id" onchange="this.form.submit()">
+              {% for user in users %}
+                <option value="{{ user.id }}" {% if user.id == selected_employee_id %}selected{% endif %}>{{ user.full_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </form>
+
+        <form method="post" action="{{ url_for('save_payroll') }}" class="form-grid">
+          <input type="hidden" name="user_id" value="{{ selected_employee_id }}">
+          <label class="field">
+            <span>الشهر</span>
+            <input type="month" name="month_label" required>
+          </label>
+          <label class="field">
+            <span>الراتب الأساسي</span>
+            <input type="number" name="base_salary" min="0" step="0.01" required>
+          </label>
+          <label class="field">
+            <span>بدل السكن</span>
+            <input type="number" name="housing_allowance" min="0" step="0.01" required>
+          </label>
+          <label class="field">
+            <span>بدل النقل</span>
+            <input type="number" name="transport_allowance" min="0" step="0.01" required>
+          </label>
+          <label class="field">
+            <span>خصم التأمينات</span>
+            <input type="number" name="insurance_deduction" min="0" step="0.01" required>
+          </label>
+          <button type="submit" class="btn btn-primary">حفظ مسير الراتب</button>
+        </form>
+      {% endif %}
+
+      <div class="payslip-card">
+        {% if current_payroll %}
+          <div class="payslip-head">
+            <div>
+              <h3>{{ current_payroll.full_name }}</h3>
+              <span>{{ format_month_label(current_payroll.month_label) }}</span>
+            </div>
+            <a class="btn btn-outline" href="{{ url_for('download_payroll', payroll_id=current_payroll.id) }}">تنزيل المسير</a>
+          </div>
+          <div class="slip-grid">
+            <div><span>الراتب الأساسي</span><strong>{{ format_currency(current_payroll.base_salary) }}</strong></div>
+            <div><span>بدل السكن</span><strong>{{ format_currency(current_payroll.housing_allowance) }}</strong></div>
+            <div><span>بدل النقل</span><strong>{{ format_currency(current_payroll.transport_allowance) }}</strong></div>
+            <div><span>خصم التأمينات</span><strong>{{ format_currency(current_payroll.insurance_deduction) }}</strong></div>
+          </div>
+          <div class="payslip-total">
+            <span>صافي الراتب</span>
+            <strong>{{ format_currency(current_payroll.net_salary) }}</strong>
+          </div>
+        {% else %}
+          <p class="empty-state">لا يوجد مسير راتب متاح لهذا المستخدم حتى الآن.</p>
+        {% endif %}
+      </div>
+
+      <div class="table-wrap compact">
+        <table>
+          <thead>
+            <tr>
+              <th>الموظف</th>
+              <th>الشهر</th>
+              <th>الصافي</th>
+              <th>تنزيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for payroll in payroll_records %}
+              <tr>
+                <td>{{ payroll.full_name }}</td>
+                <td>{{ format_month_label(payroll.month_label) }}</td>
+                <td>{{ format_currency(payroll.net_salary) }}</td>
+                <td><a class="mini-btn" href="{{ url_for('download_payroll', payroll_id=payroll.id) }}">تحميل</a></td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4">لا توجد مسيرات محفوظة.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}
