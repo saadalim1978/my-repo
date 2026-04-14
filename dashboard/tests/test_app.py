@@ -1,9 +1,11 @@
 import os
+import smtplib
 import re
 import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest import mock
 
 from app import create_app
 
@@ -99,6 +101,23 @@ class AppTestCase(unittest.TestCase):
         login_response = self.login("invite.employee@competitive.sa", "Employee@456")
         self.assertEqual(login_response.status_code, 200)
         self.assertIn("لوحة تشغيل الموارد البشرية".encode("utf-8"), login_response.data)
+
+    def test_register_request_handles_mail_delivery_failure(self) -> None:
+        self.login("aljawhara.ali@competitive.sa", "Admin@123")
+        self.client.post(
+            "/employees/create",
+            data={"full_name": "موظف بريد", "email": "mail.fail@competitive.sa"},
+            follow_redirects=True,
+        )
+        self.client.post("/logout", follow_redirects=True)
+        with mock.patch("app.send_account_email", side_effect=smtplib.SMTPException("boom")):
+            response = self.client.post(
+                "/register-request",
+                data={"email": "mail.fail@competitive.sa"},
+                follow_redirects=True,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("تعذر إرسال رابط التفعيل حاليًا".encode("utf-8"), response.data)
 
     def test_inactive_employee_cannot_login_before_activation(self) -> None:
         self.login("aljawhara.ali@competitive.sa", "Admin@123")

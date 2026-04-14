@@ -164,6 +164,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         except RuntimeError:
             flash("تم تجهيز رابط التفعيل لكن خدمة البريد غير مهيأة بعد. يرجى استكمال إعدادات البريد في البيئة.", "error")
             return redirect(url_for("login"))
+        except (smtplib.SMTPException, OSError):
+            current_app.logger.exception("Email delivery failed for invitation link.")
+            flash("تعذر إرسال رابط التفعيل حاليًا. تحقق من إعدادات البريد في Render ثم أعد المحاولة.", "error")
+            return redirect(url_for("login"))
         flash("تم إرسال رابط إكمال التسجيل إلى بريدك الإلكتروني المعتمد.", "success")
         return redirect(url_for("login"))
 
@@ -936,7 +940,7 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
     message["To"] = recipient
     message.set_content(body)
 
-    with smtplib.SMTP(mail_server, current_app.config["MAIL_PORT"]) as smtp:
+    with smtplib.SMTP(mail_server, current_app.config["MAIL_PORT"], timeout=20) as smtp:
         if current_app.config.get("MAIL_USE_TLS"):
             smtp.starttls()
         if current_app.config.get("MAIL_USERNAME"):
