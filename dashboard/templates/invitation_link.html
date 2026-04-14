@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}رابط التفعيل | شركة الحلول التنافسية{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-card">
+    <h2>رابط تفعيل الموظف</h2>
+    <p>الحساب الآن بانتظار التفعيل. يمكنك نسخ الرابط التالي وإرساله للموظف عبر البريد أو واتساب إلى حين اكتمال خدمة الإرسال الآلي.</p>
+
+    <div class="register-box">
+      <h3>{{ employee.full_name }}</h3>
+      <p>{{ employee.email }}</p>
+      <label class="field">
+        <span>رابط إكمال التسجيل</span>
+        <input id="invitation-link" type="text" value="{{ invitation_link }}" readonly>
+      </label>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-primary" onclick="copyInvitationLink()">نسخ الرابط</button>
+        <a class="btn btn-outline" href="{{ invitation_link }}" target="_blank" rel="noopener">فتح الرابط</a>
+        <a class="btn btn-outline" href="{{ url_for('dashboard') }}">العودة للوحة الأدمن</a>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+  function copyInvitationLink() {
+    const input = document.getElementById("invitation-link");
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    navigator.clipboard.writeText(input.value);
+  }
+</script>
+{% endblock %}

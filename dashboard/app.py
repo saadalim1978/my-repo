@@ -139,21 +139,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             flash("الحساب مفعل بالفعل. يمكنك تسجيل الدخول مباشرة.", "error")
             return redirect(url_for("login"))
 
-        invitation_nonce = secrets.token_urlsafe(16)
-        execute_db(
-            """
-            UPDATE users
-            SET invitation_token = ?, invitation_sent_at = ?
-            WHERE id = ?
-            """,
-            (invitation_nonce, utcnow(), user["id"]),
-        )
-
-        invitation_link = url_for(
-            "complete_registration",
-            token=build_invitation_token(user["id"], invitation_nonce),
-            _external=True,
-        )
+        invitation_link = prepare_invitation_link(user["id"])
         try:
             send_account_email(
                 recipient=user["email"],
@@ -558,7 +544,37 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             ),
         )
         flash(f"تمت إضافة الموظف {full_name}. يمكنه الآن طلب رابط إكمال التسجيل عبر بريده.", "success")
-        return redirect(url_for("dashboard"))
+        employee = query_one(
+            "SELECT id FROM users WHERE email = ? AND role = 'employee'",
+            (email,),
+        )
+        return redirect(url_for("employee_invitation_link", user_id=employee["id"]))
+
+    @app.get("/employees/<int:user_id>/invitation-link")
+    @login_required
+    @admin_required
+    def employee_invitation_link(user_id: int) -> str | Response:
+        employee = query_one(
+            """
+            SELECT id, full_name, email, is_active
+            FROM users
+            WHERE id = ? AND role = 'employee'
+            """,
+            (user_id,),
+        )
+        if not employee:
+            flash("تعذر العثور على الموظف المطلوب.", "error")
+            return redirect(url_for("dashboard"))
+        if employee["is_active"]:
+            flash("هذا الحساب مفعّل بالفعل.", "error")
+            return redirect(url_for("dashboard"))
+
+        invitation_link = prepare_invitation_link(employee["id"])
+        return render_template(
+            "invitation_link.html",
+            employee=employee,
+            invitation_link=invitation_link,
+        )
 
     @app.post("/payroll/save")
     @login_required
@@ -901,6 +917,23 @@ def get_serializer() -> URLSafeTimedSerializer:
 
 def build_invitation_token(user_id: int, nonce: str) -> str:
     return get_serializer().dumps({"user_id": user_id, "nonce": nonce})
+
+
+def prepare_invitation_link(user_id: int) -> str:
+    invitation_nonce = secrets.token_urlsafe(16)
+    execute_db(
+        """
+        UPDATE users
+        SET invitation_token = ?, invitation_sent_at = ?
+        WHERE id = ?
+        """,
+        (invitation_nonce, utcnow(), user_id),
+    )
+    return url_for(
+        "complete_registration",
+        token=build_invitation_token(user_id, invitation_nonce),
+        _external=True,
+    )
 
 
 def validate_invitation_token(token: str) -> sqlite3.Row | None:
