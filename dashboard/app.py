@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import secrets
 import sqlite3
@@ -12,6 +13,8 @@ from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from flask import (
     Flask,
@@ -42,12 +45,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY", "change-me-in-production"),
         DATABASE=str(DATABASE_PATH),
+        MAIL_PROVIDER=os.environ.get("MAIL_PROVIDER", "resend_api"),
         MAIL_SERVER=os.environ.get("MAIL_SERVER", "smtp.resend.com"),
         MAIL_PORT=int(os.environ.get("MAIL_PORT", "587")),
         MAIL_USE_TLS=os.environ.get("MAIL_USE_TLS", "true").lower() == "true",
         MAIL_USERNAME=os.environ.get("MAIL_USERNAME", "resend"),
         MAIL_PASSWORD=os.environ.get("MAIL_PASSWORD", ""),
         MAIL_FROM=os.environ.get("MAIL_FROM", "no-reply@mail.competitive.sa"),
+        RESEND_API_KEY=os.environ.get("RESEND_API_KEY", ""),
+        RESEND_API_URL=os.environ.get("RESEND_API_URL", "https://api.resend.com/emails"),
         INVITATION_EXPIRY_SECONDS=int(os.environ.get("INVITATION_EXPIRY_SECONDS", "86400")),
         MAIL_SUPPRESS_SEND=False,
         OUTBOX=[],
@@ -147,12 +153,9 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     "صلاحية الرابط 24 ساعة."
                 ),
             )
-        except (smtplib.SMTPException, OSError, RuntimeError):
+        except (smtplib.SMTPException, OSError, RuntimeError, urllib_error.URLError) as exc:
             current_app.logger.exception("Email delivery failed for invitation link.")
-            flash(
-                "تعذر إرسال رابط التفعيل حاليًا. تحقق من إعدادات Resend SMTP في Render ثم أعد المحاولة.",
-                "error",
-            )
+            flash(f"تعذر إرسال رابط التفعيل حاليًا. {exc}", "error")
             return redirect(url_for("login"))
         flash("تم إرسال رابط إكمال التسجيل إلى بريدك الإلكتروني المعتمد.", "success")
         return redirect(url_for("login"))
@@ -958,18 +961,75 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
         )
         return
 
+    mail_provider = (current_app.config.get("MAIL_PROVIDER") or "resend_api").strip().lower()
     mail_server = (current_app.config.get("MAIL_SERVER") or "").strip()
     mail_username = (current_app.config.get("MAIL_USERNAME") or "").strip()
     mail_password = current_app.config.get("MAIL_PASSWORD") or ""
     mail_from = current_app.config.get("MAIL_FROM")
-    if not mail_server or not mail_username or not mail_password or not mail_from:
-        raise RuntimeError("Resend SMTP configuration is incomplete.")
+    resend_api_key = (current_app.config.get("RESEND_API_KEY") or "").strip()
+    resend_api_url = (current_app.config.get("RESEND_API_URL") or "").strip()
+    if not mail_from:
+        raise RuntimeError("إعداد MAIL_FROM غير مكتمل.")
 
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = mail_from
     message["To"] = recipient
     message.set_content(body)
+
+    current_app.logger.info(
+        "Preparing invitation email via provider=%s from=%s to=%s",
+        mail_provider,
+        mail_from,
+        recipient,
+    )
+
+    if mail_provider == "resend_api":
+        if not resend_api_key:
+            raise RuntimeError("إعداد RESEND_API_KEY مفقود في Render.")
+        if not resend_api_key.startswith("re_"):
+            raise RuntimeError("قيمة RESEND_API_KEY غير صحيحة. يجب أن تبدأ بـ re_.")
+        if not resend_api_url:
+            raise RuntimeError("إعداد RESEND_API_URL غير مكتمل.")
+
+        payload = json.dumps(
+            {
+                "from": mail_from,
+                "to": [recipient],
+                "subject": subject,
+                "text": body,
+            }
+        ).encode("utf-8")
+        resend_request = urllib_request.Request(
+            resend_api_url,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "competitive-solutions-hr/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib_request.urlopen(resend_request, timeout=20) as response:
+                status_code = getattr(response, "status", None) or response.getcode()
+                response_body = response.read().decode("utf-8", errors="ignore")
+                current_app.logger.info(
+                    "Resend API accepted invitation email with status=%s body=%s",
+                    status_code,
+                    response_body,
+                )
+                if status_code >= 400:
+                    raise RuntimeError("خدمة Resend رفضت طلب الإرسال.")
+        except urllib_error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="ignore").strip()
+            raise RuntimeError(f"Resend API error {exc.code}: {details}") from exc
+        except urllib_error.URLError as exc:
+            raise RuntimeError(f"تعذر الوصول إلى Resend API: {exc.reason}") from exc
+        return
+
+    if not mail_server or not mail_username or not mail_password:
+        raise RuntimeError("إعدادات SMTP غير مكتملة.")
 
     with smtplib.SMTP(mail_server, current_app.config["MAIL_PORT"], timeout=20) as smtp:
         if current_app.config.get("MAIL_USE_TLS"):
