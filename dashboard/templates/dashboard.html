@@ -12,8 +12,7 @@
     </div>
     <div class="topbar-actions">
       <div class="user-badge">
-        <strong>{{ g.user.full_name }}</strong>
-        <span>{{ "إدمن" if is_admin else "موظف" }}</span>
+        <span>{{ "لوحة الأدمن" if is_admin else "لوحة الموظف" }}</span>
       </div>
       <form method="post" action="{{ url_for('logout') }}">
         <button type="submit" class="btn btn-outline">تسجيل الخروج</button>
@@ -30,7 +29,7 @@
       {% if is_admin %}
         <div class="stat-card">
           <strong>{{ dashboard_stats.employees }}</strong>
-          <span>موظفون</span>
+          <span>موظفون مفعلون</span>
         </div>
       {% endif %}
       <div class="stat-card">
@@ -266,9 +265,21 @@
         <div class="section-head">
           <div>
             <h2>إدارة حسابات الموظفين</h2>
-            <p>يمكنك حذف حساب الموظف بالكامل مع سجلاته عند الحاجة.</p>
+            <p>أضف الموظف بالاسم والبريد أولًا، ثم يطلب هو رابط إكمال التسجيل من صفحة الدخول.</p>
           </div>
         </div>
+
+        <form method="post" action="{{ url_for('create_employee') }}" class="form-grid">
+          <label class="field">
+            <span>اسم الموظف</span>
+            <input type="text" name="full_name" placeholder="الاسم الكامل" required>
+          </label>
+          <label class="field">
+            <span>البريد الإلكتروني</span>
+            <input type="email" name="email" placeholder="employee@competitive.sa" required>
+          </label>
+          <button type="submit" class="btn btn-primary">إضافة موظف جديد</button>
+        </form>
 
         <div class="table-wrap compact">
           <table>
@@ -276,23 +287,25 @@
               <tr>
                 <th>الاسم</th>
                 <th>البريد الإلكتروني</th>
+                <th>الحالة</th>
                 <th>الإجراء</th>
               </tr>
             </thead>
             <tbody>
-              {% for user in users %}
+              {% for employee in employee_directory %}
                 <tr>
-                  <td>{{ user.full_name }}</td>
-                  <td>{{ user.email }}</td>
+                  <td>{{ employee.full_name }}</td>
+                  <td>{{ employee.email }}</td>
+                  <td>{{ "مفعل" if employee.is_active else "بانتظار التفعيل" }}</td>
                   <td>
-                    <form method="post" action="{{ url_for('delete_employee', user_id=user.id) }}">
+                    <form method="post" action="{{ url_for('delete_employee', user_id=employee.id) }}">
                       <button type="submit" class="mini-btn delete">حذف الحساب</button>
                     </form>
                   </td>
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="3">لا توجد حسابات موظفين للإدارة.</td>
+                  <td colspan="4">لا توجد حسابات موظفين للإدارة.</td>
                 </tr>
               {% endfor %}
             </tbody>

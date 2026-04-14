@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}إكمال التسجيل | شركة الحلول التنافسية{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-hero">
+    <div class="brand-lockup">
+      <img src="{{ url_for('static', filename='company-logo.jpeg') }}" alt="شعار شركة الحلول التنافسية">
+      <div>
+        <strong>COMPETITIVE SOLUTIONS CO.</strong>
+        <span>منصة الموارد البشرية</span>
+      </div>
+    </div>
+    <h1>إكمال تسجيل الموظف</h1>
+    <div class="hero-title-box">
+      <h2>{{ invited_user.full_name }}</h2>
+      <p>{{ invited_user.email }}</p>
+    </div>
+  </section>
+
+  <section class="login-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="inline-messages">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }} inline-flash">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <h2>إنشاء كلمة المرور</h2>
+    <form method="post" class="form-grid single">
+      <label class="field password-field">
+        <span>كلمة المرور الجديدة</span>
+        <div class="password-control">
+          <input type="password" name="password" placeholder="8 أحرف أو أكثر" required data-password-input>
+          <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+        </div>
+      </label>
+      <label class="field password-field">
+        <span>تأكيد كلمة المرور</span>
+        <div class="password-control">
+          <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور" required data-password-input>
+          <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
+        </div>
+      </label>
+      <button type="submit" class="btn btn-primary wide">تفعيل الحساب</button>
+    </form>
+  </section>
+</main>
+<script>
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = button.parentElement.querySelector("[data-password-input]");
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      button.textContent = showing ? "إظهار" : "إخفاء";
+    });
+  });
+</script>
+{% endblock %}

@@ -48,32 +48,14 @@
     <div class="form-divider"><span>أو</span></div>
 
     <div class="register-box">
-      <h3>تسجيل موظف جديد</h3>
-      <p>يمكن للموظف إنشاء حسابه باستخدام البريد الإلكتروني وكلمة مرور خاصة به.</p>
-      <form method="post" action="{{ url_for('register') }}" class="form-grid single">
+      <h3>إكمال تسجيل موظف جديد</h3>
+      <p>إذا تمت إضافتك مسبقًا من قبل الإدارة، أدخل بريدك المعتمد ليصلك رابط إنشاء كلمة المرور وإكمال التسجيل.</p>
+      <form method="post" action="{{ url_for('register_request') }}" class="form-grid single">
         <label class="field">
-          <span>الاسم الكامل</span>
-          <input type="text" name="full_name" placeholder="مثال: محمد أحمد علي" required>
+          <span>البريد الإلكتروني المعتمد</span>
+          <input type="email" name="email" placeholder="employee@competitive.sa" required>
         </label>
-        <label class="field">
-          <span>البريد الإلكتروني</span>
-          <input type="email" name="email" placeholder="employee@email.com" required>
-        </label>
-        <label class="field password-field">
-          <span>كلمة المرور</span>
-          <div class="password-control">
-            <input type="password" name="password" placeholder="8 أحرف أو أكثر" required data-password-input>
-            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
-          </div>
-        </label>
-        <label class="field password-field">
-          <span>تأكيد كلمة المرور</span>
-          <div class="password-control">
-            <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور" required data-password-input>
-            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
-          </div>
-        </label>
-        <button type="submit" class="btn btn-outline wide">إنشاء حساب موظف</button>
+        <button type="submit" class="btn btn-outline wide">إرسال رابط إكمال التسجيل</button>
       </form>
     </div>
 

@@ -3,9 +3,12 @@ from __future__ import annotations
 import csv
 import io
 import os
+import secrets
 import sqlite3
+import smtplib
 import tempfile
 from datetime import UTC, date, datetime, timedelta
+from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -22,6 +25,7 @@ from flask import (
     session,
     url_for,
 )
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -38,6 +42,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY", "change-me-in-production"),
         DATABASE=str(DATABASE_PATH),
+        MAIL_SERVER=os.environ.get("MAIL_SERVER", ""),
+        MAIL_PORT=int(os.environ.get("MAIL_PORT", "587")),
+        MAIL_USE_TLS=os.environ.get("MAIL_USE_TLS", "true").lower() == "true",
+        MAIL_USERNAME=os.environ.get("MAIL_USERNAME", ""),
+        MAIL_PASSWORD=os.environ.get("MAIL_PASSWORD", ""),
+        MAIL_FROM=os.environ.get("MAIL_FROM", os.environ.get("MAIL_USERNAME", "")),
+        INVITATION_EXPIRY_SECONDS=int(os.environ.get("INVITATION_EXPIRY_SECONDS", "86400")),
+        MAIL_SUPPRESS_SEND=False,
+        OUTBOX=[],
     )
 
     if test_config:
@@ -80,7 +93,11 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             password = request.form.get("password", "")
             user = query_one("SELECT * FROM users WHERE email = ?", (email,))
 
-            if not user or not check_password_hash(user["password_hash"], password):
+            if not user:
+                flash("بيانات الدخول غير صحيحة.", "error")
+            elif not user["is_active"]:
+                flash("هذا الحساب لم يكتمل تفعيله بعد. اطلب رابط إكمال التسجيل باستخدام بريدك.", "error")
+            elif not check_password_hash(user["password_hash"], password):
                 flash("بيانات الدخول غير صحيحة.", "error")
             else:
                 session.clear()
@@ -90,46 +107,104 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         return render_template("login.html")
 
-    @app.post("/register")
-    def register() -> Response:
+    @app.post("/register-request")
+    def register_request() -> Response:
         if g.user:
             return redirect(url_for("dashboard"))
 
-        full_name = request.form.get("full_name", "").strip()
         email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
 
-        if not full_name or not email or not password:
-            flash("الرجاء إدخال الاسم الكامل والبريد الإلكتروني وكلمة المرور.", "error")
+        if not email:
+            flash("الرجاء إدخال البريد الإلكتروني المعتمد.", "error")
             return redirect(url_for("login"))
 
-        if password != confirm_password:
-            flash("تأكيد كلمة المرور غير مطابق.", "error")
+        user = query_one(
+            """
+            SELECT id, full_name, email, is_active
+            FROM users
+            WHERE email = ? AND role = 'employee'
+            """,
+            (email,),
+        )
+        if not user:
+            flash("هذا البريد غير مضاف مسبقًا من قبل الإدارة.", "error")
             return redirect(url_for("login"))
 
-        if len(password) < 8:
-            flash("يجب أن تكون كلمة المرور 8 أحرف على الأقل.", "error")
+        if user["is_active"]:
+            flash("الحساب مفعل بالفعل. يمكنك تسجيل الدخول مباشرة.", "error")
             return redirect(url_for("login"))
 
-        if query_one("SELECT id FROM users WHERE email = ?", (email,)):
-            flash("هذا البريد مسجل بالفعل. يمكنك تسجيل الدخول مباشرة.", "error")
-            return redirect(url_for("login"))
-
+        invitation_nonce = secrets.token_urlsafe(16)
         execute_db(
             """
-            INSERT INTO users (full_name, email, password_hash, role, created_at)
-            VALUES (?, ?, ?, 'employee', ?)
+            UPDATE users
+            SET invitation_token = ?, invitation_sent_at = ?
+            WHERE id = ?
             """,
-            (
-                full_name,
-                email,
-                generate_password_hash(password),
-                utcnow(),
-            ),
+            (invitation_nonce, utcnow(), user["id"]),
         )
-        flash(f"تم إنشاء حساب الموظف {full_name} بنجاح. يمكنك الآن تسجيل الدخول مباشرة.", "success")
+
+        invitation_link = url_for(
+            "complete_registration",
+            token=build_invitation_token(user["id"], invitation_nonce),
+            _external=True,
+        )
+        try:
+            send_account_email(
+                recipient=user["email"],
+                subject="إكمال تسجيل حسابك في نظام الموارد البشرية",
+                body=(
+                    f"مرحبًا {user['full_name']}\n\n"
+                    "تمت إضافتك من قبل إدارة شركة الحلول التنافسية.\n"
+                    "لإكمال تسجيل حسابك وإنشاء كلمة المرور افتح الرابط التالي:\n"
+                    f"{invitation_link}\n\n"
+                    "صلاحية الرابط 24 ساعة."
+                ),
+            )
+        except RuntimeError:
+            flash("تم تجهيز رابط التفعيل لكن خدمة البريد غير مهيأة بعد. يرجى استكمال إعدادات البريد في البيئة.", "error")
+            return redirect(url_for("login"))
+        flash("تم إرسال رابط إكمال التسجيل إلى بريدك الإلكتروني المعتمد.", "success")
         return redirect(url_for("login"))
+
+    @app.route("/complete-registration/<token>", methods=["GET", "POST"])
+    def complete_registration(token: str) -> Response | str:
+        if g.user:
+            return redirect(url_for("dashboard"))
+
+        invited_user = validate_invitation_token(token)
+        if not invited_user:
+            flash("رابط إكمال التسجيل غير صالح أو منتهي الصلاحية.", "error")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+
+            if not password or not confirm_password:
+                flash("الرجاء إدخال كلمة المرور وتأكيدها.", "error")
+                return redirect(url_for("complete_registration", token=token))
+
+            if password != confirm_password:
+                flash("تأكيد كلمة المرور غير مطابق.", "error")
+                return redirect(url_for("complete_registration", token=token))
+
+            if len(password) < 8:
+                flash("يجب أن تكون كلمة المرور 8 أحرف على الأقل.", "error")
+                return redirect(url_for("complete_registration", token=token))
+
+            execute_db(
+                """
+                UPDATE users
+                SET password_hash = ?, is_active = 1, invitation_token = NULL, password_set_at = ?
+                WHERE id = ?
+                """,
+                (generate_password_hash(password), utcnow(), invited_user["id"]),
+            )
+            flash("تم تفعيل حسابك بنجاح. يمكنك الآن تسجيل الدخول.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("complete_registration.html", invited_user=invited_user)
 
     @app.post("/reset-password")
     def reset_password() -> Response:
@@ -148,9 +223,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             flash("تأكيد كلمة المرور الجديدة غير مطابق.", "error")
             return redirect(url_for("login"))
 
-        user = query_one("SELECT id FROM users WHERE email = ?", (email,))
+        user = query_one("SELECT id, is_active FROM users WHERE email = ?", (email,))
         if not user:
             flash("لا يوجد حساب مرتبط بهذا البريد الإلكتروني.", "error")
+            return redirect(url_for("login"))
+
+        if not user["is_active"]:
+            flash("هذا الحساب لم يكتمل تفعيله بعد. استخدم رابط إكمال التسجيل المرسل إلى البريد.", "error")
             return redirect(url_for("login"))
 
         execute_db(
@@ -170,7 +249,20 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @login_required
     def dashboard() -> str:
         users = query_all(
-            "SELECT id, full_name, email, role FROM users WHERE role = 'employee' ORDER BY full_name"
+            """
+            SELECT id, full_name, email, role, is_active, invitation_sent_at
+            FROM users
+            WHERE role = 'employee' AND is_active = 1
+            ORDER BY full_name
+            """
+        )
+        employee_directory = query_all(
+            """
+            SELECT id, full_name, email, role, is_active, invitation_sent_at
+            FROM users
+            WHERE role = 'employee'
+            ORDER BY full_name
+            """
         )
         attendance_period = request.args.get("attendance_period", "day").strip() or "day"
         if attendance_period not in {"day", "week", "month"}:
@@ -273,6 +365,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return render_template(
             "dashboard.html",
             users=users,
+            employee_directory=employee_directory,
             attendance_summary=attendance_summary,
             payroll_records=payroll_records,
             current_payroll=current_payroll,
@@ -423,6 +516,39 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return redirect(url_for("dashboard"))
         execute_db("DELETE FROM users WHERE id = ?", (user_id,))
         flash(f"تم حذف حساب الموظف {employee['full_name']} وجميع سجلاته.", "success")
+        return redirect(url_for("dashboard"))
+
+    @app.post("/employees/create")
+    @login_required
+    @admin_required
+    def create_employee() -> Response:
+        full_name = request.form.get("full_name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+
+        if not full_name or not email:
+            flash("الرجاء إدخال اسم الموظف وبريده الإلكتروني.", "error")
+            return redirect(url_for("dashboard"))
+
+        existing = query_one("SELECT id, is_active FROM users WHERE email = ?", (email,))
+        if existing:
+            flash("هذا البريد مستخدم بالفعل داخل النظام.", "error")
+            return redirect(url_for("dashboard"))
+
+        execute_db(
+            """
+            INSERT INTO users (
+                full_name, email, password_hash, role, created_at, is_active, invitation_token, invitation_sent_at, password_set_at
+            )
+            VALUES (?, ?, ?, 'employee', ?, 0, NULL, NULL, NULL)
+            """,
+            (
+                full_name,
+                email,
+                generate_password_hash(secrets.token_urlsafe(24)),
+                utcnow(),
+            ),
+        )
+        flash(f"تمت إضافة الموظف {full_name}. يمكنه الآن طلب رابط إكمال التسجيل عبر بريده.", "success")
         return redirect(url_for("dashboard"))
 
     @app.post("/payroll/save")
@@ -592,7 +718,11 @@ def init_db() -> None:
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('admin', 'employee')),
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            invitation_token TEXT,
+            invitation_sent_at TEXT,
+            password_set_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS attendance (
@@ -621,6 +751,7 @@ def init_db() -> None:
         );
         """
     )
+    ensure_user_columns(db)
     db.commit()
 
     if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
@@ -632,6 +763,20 @@ def init_db() -> None:
     db.close()
 
 
+def ensure_user_columns(db: sqlite3.Connection) -> None:
+    columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "is_active" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+    if "invitation_token" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN invitation_token TEXT")
+    if "invitation_sent_at" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN invitation_sent_at TEXT")
+    if "password_set_at" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN password_set_at TEXT")
+
+
 def seed_users(db: sqlite3.Connection) -> None:
     now = utcnow()
     users = [
@@ -641,9 +786,13 @@ def seed_users(db: sqlite3.Connection) -> None:
         ("محمد سالم", "mohammed@competitive.local", "Employee@123", "employee"),
     ]
     db.executemany(
-        "INSERT OR IGNORE INTO users (full_name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        """
+        INSERT OR IGNORE INTO users (
+            full_name, email, password_hash, role, created_at, is_active, invitation_token, invitation_sent_at, password_set_at
+        ) VALUES (?, ?, ?, ?, ?, 1, NULL, NULL, ?)
+        """,
         [
-            (name, email, generate_password_hash(password), role, now)
+            (name, email, generate_password_hash(password), role, now, now if role == "employee" else None)
             for name, email, password, role in users
         ],
     )
@@ -661,7 +810,7 @@ def ensure_default_admin(db: sqlite3.Connection) -> None:
         db.execute(
             """
             UPDATE users
-            SET full_name = ?, email = ?, password_hash = ?, role = 'admin'
+            SET full_name = ?, email = ?, password_hash = ?, role = 'admin', is_active = 1
             WHERE id = ?
             """,
             (*payload, admin["id"]),
@@ -669,8 +818,8 @@ def ensure_default_admin(db: sqlite3.Connection) -> None:
     else:
         db.execute(
             """
-            INSERT INTO users (full_name, email, password_hash, role, created_at)
-            VALUES (?, ?, ?, 'admin', ?)
+            INSERT INTO users (full_name, email, password_hash, role, created_at, is_active)
+            VALUES (?, ?, ?, 'admin', ?, 1)
             """,
             (*payload, utcnow()),
         )
@@ -735,6 +884,67 @@ def format_month_label(value: str) -> str:
         12: "ديسمبر",
     }
     return f"{month_names[dt.month]} {dt.year}"
+
+
+def get_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="employee-invitation")
+
+
+def build_invitation_token(user_id: int, nonce: str) -> str:
+    return get_serializer().dumps({"user_id": user_id, "nonce": nonce})
+
+
+def validate_invitation_token(token: str) -> sqlite3.Row | None:
+    try:
+        payload = get_serializer().loads(
+            token,
+            max_age=current_app.config["INVITATION_EXPIRY_SECONDS"],
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+
+    user = query_one(
+        """
+        SELECT id, full_name, email, is_active, invitation_token
+        FROM users
+        WHERE id = ? AND role = 'employee'
+        """,
+        (payload["user_id"],),
+    )
+    if not user or user["is_active"]:
+        return None
+    if not user["invitation_token"] or user["invitation_token"] != payload["nonce"]:
+        return None
+    return user
+
+
+def send_account_email(recipient: str, subject: str, body: str) -> None:
+    if current_app.config.get("MAIL_SUPPRESS_SEND"):
+        current_app.config.setdefault("OUTBOX", []).append(
+            {"recipient": recipient, "subject": subject, "body": body}
+        )
+        return
+
+    mail_server = current_app.config.get("MAIL_SERVER")
+    mail_from = current_app.config.get("MAIL_FROM")
+    if not mail_server or not mail_from:
+        raise RuntimeError("Mail configuration is incomplete.")
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = mail_from
+    message["To"] = recipient
+    message.set_content(body)
+
+    with smtplib.SMTP(mail_server, current_app.config["MAIL_PORT"]) as smtp:
+        if current_app.config.get("MAIL_USE_TLS"):
+            smtp.starttls()
+        if current_app.config.get("MAIL_USERNAME"):
+            smtp.login(
+                current_app.config["MAIL_USERNAME"],
+                current_app.config["MAIL_PASSWORD"],
+            )
+        smtp.send_message(message)
 
 
 def get_attendance_range(anchor_date: date, period: str) -> tuple[str, str]:
