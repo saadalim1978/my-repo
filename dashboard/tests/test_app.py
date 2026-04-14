@@ -130,6 +130,7 @@ class AppTestCase(unittest.TestCase):
         self.app.config.update(
             MAIL_SUPPRESS_SEND=False,
             MAIL_FROM="no-reply@mail.competitive.sa",
+            MAIL_USERNAME="resend",
             RESEND_API_KEY="re_test_key",
             RESEND_API_URL="https://api.resend.com/emails",
         )

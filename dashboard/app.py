@@ -544,11 +544,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             ),
         )
         flash(f"تمت إضافة الموظف {full_name}. يمكنه الآن طلب رابط إكمال التسجيل عبر بريده.", "success")
-        employee = query_one(
-            "SELECT id FROM users WHERE email = ? AND role = 'employee'",
-            (email,),
-        )
-        return redirect(url_for("employee_invitation_link", user_id=employee["id"]))
+        return redirect(url_for("dashboard"))
 
     @app.get("/employees/<int:user_id>/invitation-link")
     @login_required
@@ -979,7 +975,7 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
 
     resend_api_key = current_app.config.get("RESEND_API_KEY", "")
     resend_api_url = current_app.config.get("RESEND_API_URL", "")
-    if resend_api_key and mail_from.endswith("@mail.competitive.sa"):
+    if resend_api_key and current_app.config.get("MAIL_USERNAME") == "resend" and mail_from.endswith("@mail.competitive.sa"):
         payload = json.dumps(
             {
                 "from": mail_from,
