@@ -990,13 +990,18 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
             headers={
                 "Authorization": f"Bearer {resend_api_key}",
                 "Content-Type": "application/json",
+                "User-Agent": "competitive-solutions-hr/1.0",
             },
             method="POST",
         )
-        with urllib_request.urlopen(resend_request, timeout=20) as response:
-            status_code = getattr(response, "status", None) or response.getcode()
-            if status_code >= 400:
-                raise RuntimeError("Resend API rejected the email request.")
+        try:
+            with urllib_request.urlopen(resend_request, timeout=20) as response:
+                status_code = getattr(response, "status", None) or response.getcode()
+                if status_code >= 400:
+                    raise RuntimeError("Resend API rejected the email request.")
+        except urllib_error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="ignore").strip()
+            raise RuntimeError(f"Resend API error {exc.code}: {details}") from exc
         return
 
     mail_server = current_app.config.get("MAIL_SERVER")
