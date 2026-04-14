@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import secrets
 import sqlite3
@@ -12,6 +13,8 @@ from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from flask import (
     Flask,
@@ -48,6 +51,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         MAIL_USERNAME=os.environ.get("MAIL_USERNAME", ""),
         MAIL_PASSWORD=os.environ.get("MAIL_PASSWORD", ""),
         MAIL_FROM=os.environ.get("MAIL_FROM", os.environ.get("MAIL_USERNAME", "")),
+        RESEND_API_KEY=os.environ.get("RESEND_API_KEY", os.environ.get("MAIL_PASSWORD", "")),
+        RESEND_API_URL=os.environ.get("RESEND_API_URL", "https://api.resend.com/emails"),
         INVITATION_EXPIRY_SECONDS=int(os.environ.get("INVITATION_EXPIRY_SECONDS", "86400")),
         MAIL_SUPPRESS_SEND=False,
         OUTBOX=[],
@@ -164,7 +169,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         except RuntimeError:
             flash("تم تجهيز رابط التفعيل لكن خدمة البريد غير مهيأة بعد. يرجى استكمال إعدادات البريد في البيئة.", "error")
             return redirect(url_for("login"))
-        except (smtplib.SMTPException, OSError):
+        except (smtplib.SMTPException, OSError, urllib_error.URLError, RuntimeError):
             current_app.logger.exception("Email delivery failed for invitation link.")
             flash("تعذر إرسال رابط التفعيل حاليًا. تحقق من إعدادات البريد في Render ثم أعد المحاولة.", "error")
             return redirect(url_for("login"))
@@ -929,9 +934,8 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
         )
         return
 
-    mail_server = current_app.config.get("MAIL_SERVER")
     mail_from = current_app.config.get("MAIL_FROM")
-    if not mail_server or not mail_from:
+    if not mail_from:
         raise RuntimeError("Mail configuration is incomplete.")
 
     message = EmailMessage()
@@ -939,6 +943,36 @@ def send_account_email(recipient: str, subject: str, body: str) -> None:
     message["From"] = mail_from
     message["To"] = recipient
     message.set_content(body)
+
+    resend_api_key = current_app.config.get("RESEND_API_KEY", "")
+    resend_api_url = current_app.config.get("RESEND_API_URL", "")
+    if resend_api_key and mail_from.endswith("@mail.competitive.sa"):
+        payload = json.dumps(
+            {
+                "from": mail_from,
+                "to": [recipient],
+                "subject": subject,
+                "text": body,
+            }
+        ).encode("utf-8")
+        resend_request = urllib_request.Request(
+            resend_api_url,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib_request.urlopen(resend_request, timeout=20) as response:
+            status_code = getattr(response, "status", None) or response.getcode()
+            if status_code >= 400:
+                raise RuntimeError("Resend API rejected the email request.")
+        return
+
+    mail_server = current_app.config.get("MAIL_SERVER")
+    if not mail_server:
+        raise RuntimeError("Mail configuration is incomplete.")
 
     with smtplib.SMTP(mail_server, current_app.config["MAIL_PORT"], timeout=20) as smtp:
         if current_app.config.get("MAIL_USE_TLS"):
