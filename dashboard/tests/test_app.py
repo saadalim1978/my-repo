@@ -119,7 +119,7 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("تعذر إرسال رابط التفعيل حاليًا".encode("utf-8"), response.data)
 
-    def test_register_request_uses_resend_api_when_configured(self) -> None:
+    def test_register_request_uses_resend_smtp_when_configured(self) -> None:
         self.login("aljawhara.ali@competitive.sa", "Admin@123")
         self.client.post(
             "/employees/create",
@@ -129,20 +129,17 @@ class AppTestCase(unittest.TestCase):
         self.client.post("/logout", follow_redirects=True)
         self.app.config.update(
             MAIL_SUPPRESS_SEND=False,
+            MAIL_SERVER="smtp.resend.com",
             MAIL_FROM="no-reply@mail.competitive.sa",
             MAIL_USERNAME="resend",
-            RESEND_API_KEY="re_test_key",
-            RESEND_API_URL="https://api.resend.com/emails",
+            MAIL_PASSWORD="re_test_key",
         )
 
-        response_mock = mock.MagicMock()
-        response_mock.__enter__.return_value = response_mock
-        response_mock.__exit__.return_value = None
-        response_mock.status = 200
+        smtp_mock = mock.MagicMock()
+        smtp_mock.__enter__.return_value = smtp_mock
+        smtp_mock.__exit__.return_value = None
 
-        with mock.patch("app.urllib_request.urlopen", return_value=response_mock) as urlopen_mock, mock.patch(
-            "app.smtplib.SMTP"
-        ) as smtp_mock:
+        with mock.patch("app.smtplib.SMTP", return_value=smtp_mock) as smtp_class_mock:
             response = self.client.post(
                 "/register-request",
                 data={"email": "resend.employee@competitive.sa"},
@@ -150,8 +147,10 @@ class AppTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        urlopen_mock.assert_called_once()
-        smtp_mock.assert_not_called()
+        smtp_class_mock.assert_called_once_with("smtp.resend.com", 587, timeout=20)
+        smtp_mock.starttls.assert_called_once()
+        smtp_mock.login.assert_called_once_with("resend", "re_test_key")
+        smtp_mock.send_message.assert_called_once()
 
     def test_inactive_employee_cannot_login_before_activation(self) -> None:
         self.login("aljawhara.ali@competitive.sa", "Admin@123")
