@@ -81,6 +81,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return {
             "format_currency": format_currency,
             "format_datetime_display": format_datetime_display,
+            "format_time_display": format_time_display,
             "format_month_label": format_month_label,
             "now_iso_local": saudi_now().strftime("%Y-%m-%dT%H:%M"),
         }
@@ -434,8 +435,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if not user_id or not recorded_at:
             flash("الرجاء إكمال بيانات الحضور والانصراف.", "error")
             return redirect(url_for("dashboard"))
-
         attendance_date = recorded_at[:10]
+        if not is_admin() and action == "\u062e\u0631\u0648\u062c" and attendance_date != saudi_today().isoformat():
+            flash("\u064a\u0645\u0643\u0646\u0643 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c \u0641\u0642\u0637 \u0641\u064a \u0646\u0641\u0633 \u0627\u0644\u064a\u0648\u0645.", "error")
+            return redirect(url_for("dashboard"))
         existing_record = query_one(
             """
             SELECT id
@@ -969,6 +972,20 @@ def format_datetime_display(value: str | None) -> str:
         try:
             parsed = datetime.strptime(normalized, fmt)
             return parsed.strftime("%m/%d/%Y %I:%M %p")
+        except ValueError:
+            continue
+    return value
+
+
+def format_time_display(value: str | None) -> str:
+    if not value:
+        return "-"
+
+    normalized = value.strip().replace(" ", "T")
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
+        try:
+            parsed = datetime.strptime(normalized, fmt)
+            return parsed.strftime("%I:%M %p")
         except ValueError:
             continue
     return value

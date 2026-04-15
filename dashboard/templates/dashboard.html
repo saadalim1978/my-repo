@@ -132,8 +132,8 @@
               <tr>
                 <td>{{ record.full_name }}</td>
                 <td>{{ record.attendance_date }}</td>
-                <td>{{ format_datetime_display(record.first_check_in) }}</td>
-                <td>{{ format_datetime_display(record.last_check_out) }}</td>
+                <td>{{ format_time_display(record.first_check_in) }}</td>
+                <td>{{ format_time_display(record.last_check_out) }}</td>
               </tr>
             {% else %}
               <tr>
