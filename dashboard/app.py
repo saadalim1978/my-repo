@@ -80,6 +80,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def inject_helpers() -> dict[str, Any]:
         return {
             "format_currency": format_currency,
+            "format_datetime_display": format_datetime_display,
             "format_month_label": format_month_label,
             "now_iso_local": saudi_now().strftime("%Y-%m-%dT%H:%M"),
         }
@@ -911,6 +912,20 @@ def utcnow() -> str:
 
 def format_currency(value: float | int) -> str:
     return f"{float(value):,.2f} ر.س"
+
+
+def format_datetime_display(value: str | None) -> str:
+    if not value:
+        return "-"
+
+    normalized = value.strip().replace(" ", "T")
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
+        try:
+            parsed = datetime.strptime(normalized, fmt)
+            return parsed.strftime("%m/%d/%Y %I:%M %p")
+        except ValueError:
+            continue
+    return value
 
 
 def format_month_label(value: str) -> str:

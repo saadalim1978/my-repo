@@ -264,8 +264,8 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("سجل الدخول".encode("utf-8"), response.data)
         self.assertIn("سجل الخروج".encode("utf-8"), response.data)
-        self.assertIn("2026-04-20T08:00".encode("utf-8"), response.data)
-        self.assertIn("2026-04-20T17:00".encode("utf-8"), response.data)
+        self.assertIn("04/20/2026 08:00 AM".encode("utf-8"), response.data)
+        self.assertIn("04/20/2026 05:00 PM".encode("utf-8"), response.data)
 
     def test_attendance_create_overwrites_same_day_same_action(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
@@ -283,8 +283,8 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("تم تحديث آخر حركة لهذا اليوم".encode("utf-8"), response.data)
         dashboard_response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-21")
-        self.assertIn("2026-04-21T09:30".encode("utf-8"), dashboard_response.data)
-        self.assertNotIn("2026-04-21T08:00".encode("utf-8"), dashboard_response.data)
+        self.assertIn("04/21/2026 09:30 AM".encode("utf-8"), dashboard_response.data)
+        self.assertNotIn("04/21/2026 08:00 AM".encode("utf-8"), dashboard_response.data)
 
 
 if __name__ == "__main__":
