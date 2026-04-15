@@ -280,9 +280,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     users.id AS user_id,
                     users.full_name,
                     DATE(attendance.recorded_at) AS attendance_date,
-                    MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
-                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out,
-                    COUNT(*) AS event_count
+                    MAX(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
                 FROM attendance
                 JOIN users ON users.id = attendance.user_id
                 WHERE attendance.recorded_at >= ? AND attendance.recorded_at < ?
@@ -309,9 +308,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     users.id AS user_id,
                     users.full_name,
                     DATE(attendance.recorded_at) AS attendance_date,
-                    MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
-                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out,
-                    COUNT(*) AS event_count
+                    MAX(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                    MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
                 FROM attendance
                 JOIN users ON users.id = attendance.user_id
                 WHERE attendance.user_id = ? AND attendance.recorded_at >= ? AND attendance.recorded_at < ?
@@ -350,7 +348,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "employees": len(users),
             "attendance_count": len(attendance_summary),
             "today_count": sum(
-                row["attendance_date"] == date.today().isoformat()
+                row["attendance_date"] == saudi_today().isoformat()
                 for row in attendance_summary
             ),
             "payroll_count": len(payroll_records),
@@ -390,11 +388,34 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             flash("الرجاء إكمال بيانات الحضور والانصراف.", "error")
             return redirect(url_for("dashboard"))
 
-        execute_db(
-            "INSERT INTO attendance (user_id, action, recorded_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, action, recorded_at, utcnow(), utcnow()),
+        attendance_date = recorded_at[:10]
+        existing_record = query_one(
+            """
+            SELECT id
+            FROM attendance
+            WHERE user_id = ? AND action = ? AND substr(recorded_at, 1, 10) = ?
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (user_id, action, attendance_date),
         )
-        flash("تم حفظ سجل الحضور والانصراف بنجاح.", "success")
+
+        if existing_record:
+            execute_db(
+                """
+                UPDATE attendance
+                SET recorded_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (recorded_at, utcnow(), existing_record["id"]),
+            )
+            flash("تم تحديث آخر حركة لهذا اليوم بنجاح.", "success")
+        else:
+            execute_db(
+                "INSERT INTO attendance (user_id, action, recorded_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (user_id, action, recorded_at, utcnow(), utcnow()),
+            )
+            flash("تم حفظ سجل الحضور والانصراف بنجاح.", "success")
         return redirect(url_for("dashboard"))
 
     @app.post("/attendance/<int:attendance_id>/update")
@@ -471,7 +492,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             SELECT
                 users.full_name,
                 DATE(attendance.recorded_at) AS attendance_date,
-                MIN(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
+                MAX(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
                 MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
             FROM attendance
             JOIN users ON users.id = attendance.user_id

@@ -125,7 +125,6 @@
               <th>التاريخ</th>
               <th>سجل الدخول</th>
               <th>سجل الخروج</th>
-              <th>عدد الحركات</th>
             </tr>
           </thead>
           <tbody>
@@ -135,11 +134,10 @@
                 <td>{{ record.attendance_date }}</td>
                 <td>{{ record.first_check_in or "-" }}</td>
                 <td>{{ record.last_check_out or "-" }}</td>
-                <td>{{ record.event_count }}</td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="5">لا توجد سجلات للفترة المحددة.</td>
+                <td colspan="4">لا توجد سجلات للفترة المحددة.</td>
               </tr>
             {% endfor %}
           </tbody>
