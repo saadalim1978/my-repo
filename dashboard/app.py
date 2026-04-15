@@ -602,8 +602,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             """
             SELECT
                 DATE(attendance.recorded_at) AS attendance_date,
-                MAX(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
-                MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
+                MIN(attendance.recorded_at) AS first_check_in,
+                MAX(attendance.recorded_at) AS last_check_out
             FROM attendance
             WHERE attendance.user_id = ? AND attendance.recorded_at >= ? AND attendance.recorded_at < ?
             GROUP BY DATE(attendance.recorded_at)
@@ -611,73 +611,23 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             """,
             (selected_employee_id, range_start, range_end),
         )
-        rows_by_date = {row["attendance_date"]: row for row in rows}
 
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = "الحضور والانصراف"
+        sheet.title = "Attendance"
+        sheet.append(["اسم الموظف", "التاريخ", "وقت الدخول", "وقت الخروج"])
 
-        title_fill = PatternFill(fill_type="solid", fgColor="DDEFE5")
-        header_fill = PatternFill(fill_type="solid", fgColor="E7F0EA")
-        weekend_fill = PatternFill(fill_type="solid", fgColor="FCE4E4")
-        thin_border = Border(
-            left=Side(style="thin", color="B7C5BA"),
-            right=Side(style="thin", color="B7C5BA"),
-            top=Side(style="thin", color="B7C5BA"),
-            bottom=Side(style="thin", color="B7C5BA"),
-        )
+        for row in rows:
+            sheet.append(
+                [
+                    employee["full_name"],
+                    row["attendance_date"],
+                    format_time_display(row["first_check_in"]) if row["first_check_in"] else "",
+                    format_time_display(row["last_check_out"]) if row["last_check_out"] else "",
+                ]
+            )
 
-        month_label = format_month_label(anchor_date.strftime("%Y-%m"))
-        sheet.merge_cells("A1:D1")
-        title_cell = sheet["A1"]
-        title_cell.value = f"{employee['full_name']} - {month_label}"
-        title_cell.font = Font(bold=True, size=15, color="173221")
-        title_cell.fill = title_fill
-        title_cell.alignment = Alignment(horizontal="center", vertical="center")
-        title_cell.border = thin_border
-
-        headers = ["اليوم", "التاريخ", "وقت الدخول", "وقت الخروج"]
-        for column_index, header in enumerate(headers, start=1):
-            cell = sheet.cell(row=3, column=column_index, value=header)
-            cell.font = Font(bold=True, color="173221")
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = thin_border
-
-        current_day = parse_display_datetime(range_start).date()
-        end_day = parse_display_datetime(range_end).date()
-        output_row = 4
-        while current_day < end_day:
-            attendance_row = rows_by_date.get(current_day.isoformat())
-            check_in = format_time_display(attendance_row["first_check_in"]) if attendance_row and attendance_row["first_check_in"] else ""
-            check_out = format_time_display(attendance_row["last_check_out"]) if attendance_row and attendance_row["last_check_out"] else ""
-            values = [
-                WEEKDAY_NAMES_AR[current_day.weekday()],
-                current_day.strftime("%m/%d/%Y"),
-                check_in,
-                check_out,
-            ]
-            is_weekend = current_day.weekday() in {4, 5}
-            for column_index, value in enumerate(values, start=1):
-                cell = sheet.cell(row=output_row, column=column_index, value=value)
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-                cell.border = thin_border
-                if is_weekend:
-                    cell.font = Font(color="C00000", bold=column_index == 1)
-                    cell.fill = weekend_fill
-            current_day += timedelta(days=1)
-            output_row += 1
-
-        signature_row = output_row + 2
-        sheet.merge_cells(start_row=signature_row, start_column=1, end_row=signature_row, end_column=4)
-        signature_cell = sheet.cell(row=signature_row, column=1, value="توقيع الموظف: ________________________________")
-        signature_cell.font = Font(bold=True, color="173221")
-        signature_cell.alignment = Alignment(horizontal="right", vertical="center")
-
-        sheet.row_dimensions[1].height = 26
-        for row_index in range(3, output_row):
-            sheet.row_dimensions[row_index].height = 22
-        sheet.column_dimensions["A"].width = 18
+        sheet.column_dimensions["A"].width = 24
         sheet.column_dimensions["B"].width = 16
         sheet.column_dimensions["C"].width = 16
         sheet.column_dimensions["D"].width = 16
@@ -686,14 +636,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         buffer = io.BytesIO()
         workbook.save(buffer)
         buffer.seek(0)
-        safe_name = employee["full_name"].replace(" ", "-")
 
         return Response(
             buffer.getvalue(),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
                 "Content-Disposition": (
-                    f"attachment; filename=attendance-{safe_name}-{anchor_date.strftime('%Y-%m')}.xlsx"
+                    f"attachment; filename=attendance-employee-{employee['id']}-{anchor_date.strftime('%Y-%m')}.xlsx"
                 )
             },
         )

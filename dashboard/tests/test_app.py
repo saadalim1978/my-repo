@@ -82,17 +82,10 @@ class AppTestCase(unittest.TestCase):
         )
         workbook = load_workbook(BytesIO(export_response.data))
         sheet = workbook.active
-        self.assertEqual(sheet["A1"].value, "أحمد علي - أبريل 2026")
-        self.assertEqual(sheet["A3"].value, "اليوم")
-        self.assertEqual(sheet["B3"].value, "التاريخ")
-        self.assertEqual(sheet["C3"].value, "وقت الدخول")
-        self.assertEqual(sheet["D3"].value, "وقت الخروج")
-        self.assertEqual(sheet["A4"].value, "الأربعاء")
-        self.assertEqual(sheet["A6"].value, "الجمعة")
-        self.assertEqual(sheet["A7"].value, "السبت")
-        self.assertEqual(sheet["C20"].value, "08:00 AM")
-        self.assertEqual(sheet["D20"].value, "05:00 PM")
-        self.assertIn("توقيع الموظف", sheet["A36"].value)
+        self.assertEqual(sheet.title, "Attendance")
+        self.assertEqual(sheet.max_column, 4)
+        exported_rows = list(sheet.iter_rows(min_row=2, values_only=True))
+        self.assertIn(("أحمد علي", "2026-04-17", "08:00 AM", "05:00 PM"), exported_rows)
 
     def test_employee_cannot_export_attendance(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
