@@ -8,7 +8,7 @@ import secrets
 import sqlite3
 import smtplib
 import tempfile
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
@@ -38,6 +38,7 @@ DATA_ROOT = Path(
     or tempfile.gettempdir()
 )
 DATABASE_PATH = DATA_ROOT / "CompetitiveSolutionsHR" / "competitive_solutions.db"
+SAUDI_TZ = timezone(timedelta(hours=3), name="Asia/Riyadh")
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -80,7 +81,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return {
             "format_currency": format_currency,
             "format_month_label": format_month_label,
-            "now_iso_local": datetime.now().strftime("%Y-%m-%dT%H:%M"),
+            "now_iso_local": saudi_now().strftime("%Y-%m-%dT%H:%M"),
         }
 
     @app.route("/")
@@ -260,7 +261,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         attendance_period = request.args.get("attendance_period", "day").strip() or "day"
         if attendance_period not in {"day", "week", "month"}:
             attendance_period = "day"
-        attendance_date = request.args.get("attendance_date", datetime.now().strftime("%Y-%m-%d")).strip()
+        attendance_date = request.args.get("attendance_date", saudi_today().strftime("%Y-%m-%d")).strip()
         try:
             anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
         except ValueError:
@@ -458,7 +459,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @admin_required
     def export_attendance() -> Response:
         attendance_period = request.args.get("attendance_period", "day").strip()
-        attendance_date = request.args.get("attendance_date", datetime.now().strftime("%Y-%m-%d")).strip()
+        attendance_date = request.args.get("attendance_date", saudi_today().strftime("%Y-%m-%d")).strip()
         try:
             anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
         except ValueError:
@@ -873,6 +874,14 @@ def seed_business_data(db: sqlite3.Connection) -> None:
         ],
     )
     db.commit()
+
+
+def saudi_now() -> datetime:
+    return datetime.now(SAUDI_TZ)
+
+
+def saudi_today() -> date:
+    return saudi_now().date()
 
 
 def utcnow() -> str:
