@@ -201,21 +201,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         return render_template("complete_registration.html", invited_user=invited_user)
 
-    @app.post("/reset-password")
-    def reset_password() -> Response:
+    @app.post("/reset-password-request")
+    def reset_password_request() -> Response:
         if g.user:
             return redirect(url_for("dashboard"))
 
         email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
 
-        if not email or not password or not confirm_password:
-            flash("الرجاء إدخال البريد الإلكتروني وكلمة المرور الجديدة وتأكيدها.", "error")
-            return redirect(url_for("login"))
-
-        if password != confirm_password:
-            flash("تأكيد كلمة المرور الجديدة غير مطابق.", "error")
+        if not email:
+            flash("الرجاء إدخال البريد الإلكتروني المعتمد.", "error")
             return redirect(url_for("login"))
 
         user = query_one("SELECT id, is_active FROM users WHERE email = ?", (email,))
@@ -227,12 +221,64 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             flash("هذا الحساب لم يكتمل تفعيله بعد. استخدم رابط إكمال التسجيل المرسل إلى البريد.", "error")
             return redirect(url_for("login"))
 
-        execute_db(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
-            (generate_password_hash(password), user["id"]),
-        )
-        flash("تم تحديث كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمتك الجديدة.", "success")
+        reset_link = prepare_reset_link(user["id"])
+        try:
+            send_account_email(
+                recipient=email,
+                subject="إعادة تعيين كلمة المرور في نظام الموارد البشرية",
+                body=(
+                    "تم استلام طلب إعادة تعيين كلمة المرور الخاصة بك.\n\n"
+                    "لإكمال تعيين كلمة مرور جديدة افتح الرابط التالي:\n"
+                    f"{reset_link}\n\n"
+                    "صلاحية الرابط 24 ساعة."
+                ),
+            )
+        except (smtplib.SMTPException, OSError, RuntimeError, urllib_error.URLError) as exc:
+            current_app.logger.exception("Password reset email delivery failed.")
+            flash(f"تعذر إرسال رابط إعادة التعيين حاليًا. {exc}", "error")
+            return redirect(url_for("login"))
+
+        flash("تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المعتمد.", "success")
         return redirect(url_for("login"))
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def complete_password_reset(token: str) -> Response | str:
+        if g.user:
+            return redirect(url_for("dashboard"))
+
+        user = validate_reset_token(token)
+        if not user:
+            flash("رابط إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية.", "error")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+
+            if not password or not confirm_password:
+                flash("الرجاء إدخال كلمة المرور وتأكيدها.", "error")
+                return redirect(url_for("complete_password_reset", token=token))
+
+            if password != confirm_password:
+                flash("تأكيد كلمة المرور غير مطابق.", "error")
+                return redirect(url_for("complete_password_reset", token=token))
+
+            if len(password) < 8:
+                flash("يجب أن تكون كلمة المرور 8 أحرف على الأقل.", "error")
+                return redirect(url_for("complete_password_reset", token=token))
+
+            execute_db(
+                """
+                UPDATE users
+                SET password_hash = ?, invitation_token = NULL, password_set_at = ?
+                WHERE id = ?
+                """,
+                (generate_password_hash(password), utcnow(), user["id"]),
+            )
+            flash("تم تحديث كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمتك الجديدة.", "success")
+            return redirect(url_for("login"))
+
+        return render_template("reset_password.html", reset_user=user)
 
     @app.route("/logout", methods=["POST"])
     def logout() -> Response:
@@ -954,11 +1000,11 @@ def get_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="employee-invitation")
 
 
-def build_invitation_token(user_id: int, nonce: str) -> str:
-    return get_serializer().dumps({"user_id": user_id, "nonce": nonce})
+def build_action_token(user_id: int, nonce: str, purpose: str) -> str:
+    return get_serializer().dumps({"user_id": user_id, "nonce": nonce, "purpose": purpose})
 
 
-def prepare_invitation_link(user_id: int) -> str:
+def prepare_action_link(user_id: int, purpose: str, endpoint: str) -> str:
     invitation_nonce = secrets.token_urlsafe(16)
     execute_db(
         """
@@ -969,13 +1015,21 @@ def prepare_invitation_link(user_id: int) -> str:
         (invitation_nonce, utcnow(), user_id),
     )
     return url_for(
-        "complete_registration",
-        token=build_invitation_token(user_id, invitation_nonce),
+        endpoint,
+        token=build_action_token(user_id, invitation_nonce, purpose),
         _external=True,
     )
 
 
-def validate_invitation_token(token: str) -> sqlite3.Row | None:
+def prepare_invitation_link(user_id: int) -> str:
+    return prepare_action_link(user_id, "invite", "complete_registration")
+
+
+def prepare_reset_link(user_id: int) -> str:
+    return prepare_action_link(user_id, "reset", "complete_password_reset")
+
+
+def validate_action_token(token: str, purpose: str, require_active: bool) -> sqlite3.Row | None:
     try:
         payload = get_serializer().loads(
             token,
@@ -992,11 +1046,25 @@ def validate_invitation_token(token: str) -> sqlite3.Row | None:
         """,
         (payload["user_id"],),
     )
-    if not user or user["is_active"]:
+    if not user:
+        return None
+    if require_active and not user["is_active"]:
+        return None
+    if not require_active and user["is_active"]:
+        return None
+    if payload.get("purpose") != purpose:
         return None
     if not user["invitation_token"] or user["invitation_token"] != payload["nonce"]:
         return None
     return user
+
+
+def validate_invitation_token(token: str) -> sqlite3.Row | None:
+    return validate_action_token(token, "invite", require_active=False)
+
+
+def validate_reset_token(token: str) -> sqlite3.Row | None:
+    return validate_action_token(token, "reset", require_active=True)
 
 
 def send_account_email(recipient: str, subject: str, body: str) -> None:

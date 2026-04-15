@@ -61,27 +61,13 @@
 
     <div class="register-box hidden-panel" id="reset-password-panel">
       <h3>إعادة تعيين كلمة المرور</h3>
-      <p>أدخل بريدك الإلكتروني ثم عيّن كلمة مرور جديدة للدخول إلى النظام.</p>
-      <form method="post" action="{{ url_for('reset_password') }}" class="form-grid single">
+      <p>أدخل بريدك الإلكتروني المعتمد ليصلك رابط آمن لإعادة تعيين كلمة المرور.</p>
+      <form method="post" action="{{ url_for('reset_password_request') }}" class="form-grid single">
         <label class="field">
           <span>البريد الإلكتروني</span>
           <input type="email" name="email" placeholder="employee@email.com" required>
         </label>
-        <label class="field password-field">
-          <span>كلمة المرور الجديدة</span>
-          <div class="password-control">
-            <input type="password" name="password" placeholder="أدخل كلمة المرور الجديدة" required data-password-input>
-            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
-          </div>
-        </label>
-        <label class="field password-field">
-          <span>تأكيد كلمة المرور الجديدة</span>
-          <div class="password-control">
-            <input type="password" name="confirm_password" placeholder="أعد كتابة كلمة المرور الجديدة" required data-password-input>
-            <button type="button" class="toggle-password" data-toggle-password>إظهار</button>
-          </div>
-        </label>
-        <button type="submit" class="btn btn-outline wide">تحديث كلمة المرور</button>
+        <button type="submit" class="btn btn-outline wide">إرسال رابط إعادة التعيين</button>
       </form>
     </div>
   </section>

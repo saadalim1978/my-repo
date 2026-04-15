@@ -42,6 +42,13 @@ class AppTestCase(unittest.TestCase):
         self.assertIsNotNone(match)
         return match.group("path")
 
+    def extract_reset_path(self) -> str:
+        outbox = self.app.config["OUTBOX"]
+        self.assertTrue(outbox)
+        match = re.search(r"http://localhost(?P<path>/reset-password/[^\s]+)", outbox[-1]["body"])
+        self.assertIsNotNone(match)
+        return match.group("path")
+
     def test_login_page_loads(self) -> None:
         response = self.client.get("/login")
         self.assertEqual(response.status_code, 200)
@@ -189,17 +196,28 @@ class AppTestCase(unittest.TestCase):
         response = self.login("inactive.employee@competitive.sa", "Employee@123")
         self.assertIn("لم يكتمل تفعيله".encode("utf-8"), response.data)
 
-    def test_employee_can_reset_password(self) -> None:
+    def test_employee_can_request_reset_password_link(self) -> None:
         response = self.client.post(
-            "/reset-password",
-            data={
-                "email": "ahmed@competitive.local",
-                "password": "Employee@789",
-                "confirm_password": "Employee@789",
-            },
+            "/reset-password-request",
+            data={"email": "ahmed@competitive.local"},
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
+        self.assertIn("تم إرسال رابط إعادة تعيين كلمة المرور".encode("utf-8"), response.data)
+
+        reset_path = self.extract_reset_path()
+        form_response = self.client.get(reset_path)
+        self.assertEqual(form_response.status_code, 200)
+        self.assertIn("إنشاء كلمة مرور جديدة".encode("utf-8"), form_response.data)
+
+        update_response = self.client.post(
+            reset_path,
+            data={"password": "Employee@789", "confirm_password": "Employee@789"},
+            follow_redirects=True,
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertIn("تم تحديث كلمة المرور بنجاح".encode("utf-8"), update_response.data)
+
         login_response = self.login("ahmed@competitive.local", "Employee@789")
         self.assertEqual(login_response.status_code, 200)
         self.assertIn("لوحة تشغيل الموارد البشرية".encode("utf-8"), login_response.data)
