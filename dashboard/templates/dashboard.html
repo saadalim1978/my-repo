@@ -107,7 +107,7 @@
             <p>يتم تطبيق التصدير والحذف على الفترة المحددة في المرشح أعلاه.</p>
           </div>
           <div class="topbar-actions">
-            <a class="btn btn-outline" href="{{ url_for('export_attendance', **export_query) }}">تنزيل CSV</a>
+            <a class="btn btn-outline" href="{{ url_for('export_attendance', **export_query) }}">تنزيل ملف الحضور</a>
             <form method="post" action="{{ url_for('delete_attendance_range') }}">
               <input type="hidden" name="attendance_period" value="{{ attendance_period }}">
               <input type="hidden" name="attendance_date" value="{{ attendance_date }}">

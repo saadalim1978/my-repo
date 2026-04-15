@@ -5,10 +5,13 @@ import tempfile
 import unittest
 import uuid
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 from unittest import mock
 
-from app import create_app
+from openpyxl import load_workbook
+
+from app import create_app, format_time_display
 
 
 class AppTestCase(unittest.TestCase):
@@ -59,11 +62,37 @@ class AppTestCase(unittest.TestCase):
     def test_admin_can_login_and_export_attendance(self) -> None:
         response = self.login("aljawhara.ali@competitive.sa", "Admin@123")
         self.assertEqual(response.status_code, 200)
-        csv_response = self.client.get("/attendance/export")
-        self.assertEqual(csv_response.status_code, 200)
-        self.assertIn("text/csv", csv_response.headers["Content-Type"])
-        self.assertTrue(csv_response.data.startswith(b"\xff\xfe"))
-        self.assertIn("اسم الموظف".encode("utf-16le"), csv_response.data)
+        self.client.post(
+            "/attendance/create",
+            data={"user_id": 2, "action": "دخول", "recorded_at": "2026-04-17T08:00"},
+            follow_redirects=True,
+        )
+        self.client.post(
+            "/attendance/create",
+            data={"user_id": 2, "action": "خروج", "recorded_at": "2026-04-17T17:00"},
+            follow_redirects=True,
+        )
+        export_response = self.client.get(
+            "/attendance/export?employee_id=2&attendance_period=month&attendance_date=2026-04-15"
+        )
+        self.assertEqual(export_response.status_code, 200)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            export_response.headers["Content-Type"],
+        )
+        workbook = load_workbook(BytesIO(export_response.data))
+        sheet = workbook.active
+        self.assertEqual(sheet["A1"].value, "أحمد علي - أبريل 2026")
+        self.assertEqual(sheet["A3"].value, "اليوم")
+        self.assertEqual(sheet["B3"].value, "التاريخ")
+        self.assertEqual(sheet["C3"].value, "وقت الدخول")
+        self.assertEqual(sheet["D3"].value, "وقت الخروج")
+        self.assertEqual(sheet["A4"].value, "الأربعاء")
+        self.assertEqual(sheet["A6"].value, "الجمعة")
+        self.assertEqual(sheet["A7"].value, "السبت")
+        self.assertEqual(sheet["C20"].value, "08:00 AM")
+        self.assertEqual(sheet["D20"].value, "05:00 PM")
+        self.assertIn("توقيع الموظف", sheet["A36"].value)
 
     def test_employee_cannot_export_attendance(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
@@ -318,6 +347,12 @@ class AppTestCase(unittest.TestCase):
         self.assertIn("\u064a\u0645\u0643\u0646\u0643 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c \u0641\u0642\u0637 \u0641\u064a \u0646\u0641\u0633 \u0627\u0644\u064a\u0648\u0645.".encode("utf-8"), response.data)
         dashboard_response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-22")
         self.assertNotIn("08:00 AM".encode("utf-8"), dashboard_response.data)
+
+    def test_format_time_display_returns_time_only(self) -> None:
+        self.assertEqual(format_time_display("2026-04-15T20:52"), "08:52 PM")
+        self.assertEqual(format_time_display("2026-04-15 20:52:00"), "08:52 PM")
+        self.assertEqual(format_time_display("2026-04-15T17:52:00+00:00"), "08:52 PM")
+        self.assertEqual(format_time_display(None), "")
 
 
 if __name__ == "__main__":

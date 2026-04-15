@@ -16,6 +16,8 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from flask import (
     Flask,
     Response,
@@ -39,6 +41,15 @@ DATA_ROOT = Path(
 )
 DATABASE_PATH = DATA_ROOT / "CompetitiveSolutionsHR" / "competitive_solutions.db"
 SAUDI_TZ = timezone(timedelta(hours=3), name="Asia/Riyadh")
+WEEKDAY_NAMES_AR = {
+    0: "الاثنين",
+    1: "الثلاثاء",
+    2: "الأربعاء",
+    3: "الخميس",
+    4: "الجمعة",
+    5: "السبت",
+    6: "الأحد",
+}
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -315,6 +326,31 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         except ValueError:
             anchor_date = date.today()
             attendance_date = anchor_date.isoformat()
+        selected_employee_id = request.args.get("employee_id", type=int)
+        if not selected_employee_id and users:
+            selected_employee_id = users[0]["id"]
+        if not selected_employee_id:
+            flash("الرجاء اختيار الموظف المطلوب قبل تنزيل ملف الحضور والانصراف.", "error")
+            return redirect(
+                url_for(
+                    "dashboard",
+                    attendance_period=attendance_period,
+                    attendance_date=attendance_date,
+                )
+            )
+        employee = query_one(
+            "SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'",
+            (selected_employee_id,),
+        )
+        if not employee:
+            flash("تعذر العثور على الموظف المطلوب للتصدير.", "error")
+            return redirect(
+                url_for(
+                    "dashboard",
+                    attendance_period=attendance_period,
+                    attendance_date=attendance_date,
+                )
+            )
         range_start, range_end = get_attendance_range(anchor_date, attendance_period)
         export_query = {
             "attendance_period": attendance_period,
@@ -349,6 +385,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             selected_employee_id = request.args.get("employee_id", type=int)
             if not selected_employee_id and users:
                 selected_employee_id = users[0]["id"]
+            if selected_employee_id:
+                export_query["employee_id"] = selected_employee_id
         else:
             attendance_summary = query_all(
                 """
@@ -531,43 +569,132 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def export_attendance() -> Response:
         attendance_period = request.args.get("attendance_period", "day").strip()
         attendance_date = request.args.get("attendance_date", saudi_today().strftime("%Y-%m-%d")).strip()
+        selected_employee_id = request.args.get("employee_id", type=int)
         try:
             anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
         except ValueError:
             anchor_date = date.today()
             attendance_date = anchor_date.isoformat()
+        if not selected_employee_id:
+            flash("الرجاء اختيار الموظف المطلوب قبل تنزيل ملف الحضور والانصراف.", "error")
+            return redirect(
+                url_for(
+                    "dashboard",
+                    attendance_period=attendance_period,
+                    attendance_date=attendance_date,
+                )
+            )
+        employee = query_one(
+            "SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'",
+            (selected_employee_id,),
+        )
+        if not employee:
+            flash("تعذر العثور على الموظف المطلوب للتصدير.", "error")
+            return redirect(
+                url_for(
+                    "dashboard",
+                    attendance_period=attendance_period,
+                    attendance_date=attendance_date,
+                )
+            )
         range_start, range_end = get_attendance_range(anchor_date, attendance_period)
         rows = query_all(
             """
             SELECT
-                users.full_name,
                 DATE(attendance.recorded_at) AS attendance_date,
                 MAX(CASE WHEN attendance.action = 'دخول' THEN attendance.recorded_at END) AS first_check_in,
                 MAX(CASE WHEN attendance.action = 'خروج' THEN attendance.recorded_at END) AS last_check_out
             FROM attendance
-            JOIN users ON users.id = attendance.user_id
-            WHERE attendance.recorded_at >= ? AND attendance.recorded_at < ?
-            GROUP BY users.id, DATE(attendance.recorded_at)
-            ORDER BY attendance_date DESC, users.full_name
+            WHERE attendance.user_id = ? AND attendance.recorded_at >= ? AND attendance.recorded_at < ?
+            GROUP BY DATE(attendance.recorded_at)
+            ORDER BY attendance_date ASC
             """,
-            (range_start, range_end),
+            (selected_employee_id, range_start, range_end),
         )
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(["اسم الموظف", "التاريخ", "وقت الدخول", "وقت الخروج"])
-        for row in rows:
-            writer.writerow([
-                row["full_name"],
-                row["attendance_date"],
-                row["first_check_in"] or "-",
-                row["last_check_out"] or "-",
-            ])
+        rows_by_date = {row["attendance_date"]: row for row in rows}
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "الحضور والانصراف"
+
+        title_fill = PatternFill(fill_type="solid", fgColor="DDEFE5")
+        header_fill = PatternFill(fill_type="solid", fgColor="E7F0EA")
+        weekend_fill = PatternFill(fill_type="solid", fgColor="FCE4E4")
+        thin_border = Border(
+            left=Side(style="thin", color="B7C5BA"),
+            right=Side(style="thin", color="B7C5BA"),
+            top=Side(style="thin", color="B7C5BA"),
+            bottom=Side(style="thin", color="B7C5BA"),
+        )
+
+        month_label = format_month_label(anchor_date.strftime("%Y-%m"))
+        sheet.merge_cells("A1:D1")
+        title_cell = sheet["A1"]
+        title_cell.value = f"{employee['full_name']} - {month_label}"
+        title_cell.font = Font(bold=True, size=15, color="173221")
+        title_cell.fill = title_fill
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        title_cell.border = thin_border
+
+        headers = ["اليوم", "التاريخ", "وقت الدخول", "وقت الخروج"]
+        for column_index, header in enumerate(headers, start=1):
+            cell = sheet.cell(row=3, column=column_index, value=header)
+            cell.font = Font(bold=True, color="173221")
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+
+        current_day = parse_display_datetime(range_start).date()
+        end_day = parse_display_datetime(range_end).date()
+        output_row = 4
+        while current_day < end_day:
+            attendance_row = rows_by_date.get(current_day.isoformat())
+            check_in = format_time_display(attendance_row["first_check_in"]) if attendance_row and attendance_row["first_check_in"] else ""
+            check_out = format_time_display(attendance_row["last_check_out"]) if attendance_row and attendance_row["last_check_out"] else ""
+            values = [
+                WEEKDAY_NAMES_AR[current_day.weekday()],
+                current_day.strftime("%m/%d/%Y"),
+                check_in,
+                check_out,
+            ]
+            is_weekend = current_day.weekday() in {4, 5}
+            for column_index, value in enumerate(values, start=1):
+                cell = sheet.cell(row=output_row, column=column_index, value=value)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = thin_border
+                if is_weekend:
+                    cell.font = Font(color="C00000", bold=column_index == 1)
+                    cell.fill = weekend_fill
+            current_day += timedelta(days=1)
+            output_row += 1
+
+        signature_row = output_row + 2
+        sheet.merge_cells(start_row=signature_row, start_column=1, end_row=signature_row, end_column=4)
+        signature_cell = sheet.cell(row=signature_row, column=1, value="توقيع الموظف: ________________________________")
+        signature_cell.font = Font(bold=True, color="173221")
+        signature_cell.alignment = Alignment(horizontal="right", vertical="center")
+
+        sheet.row_dimensions[1].height = 26
+        for row_index in range(3, output_row):
+            sheet.row_dimensions[row_index].height = 22
+        sheet.column_dimensions["A"].width = 18
+        sheet.column_dimensions["B"].width = 16
+        sheet.column_dimensions["C"].width = 16
+        sheet.column_dimensions["D"].width = 16
+        sheet.sheet_view.rightToLeft = True
+
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        safe_name = employee["full_name"].replace(" ", "-")
 
         return Response(
-            ("\ufeff" + buffer.getvalue()).encode("utf-16le"),
-            mimetype="text/csv; charset=utf-16",
+            buffer.getvalue(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": "attachment; filename=attendance-records.csv"
+                "Content-Disposition": (
+                    f"attachment; filename=attendance-{safe_name}-{anchor_date.strftime('%Y-%m')}.xlsx"
+                )
             },
         )
 
@@ -964,31 +1091,37 @@ def format_currency(value: float | int) -> str:
 
 
 def format_datetime_display(value: str | None) -> str:
-    if not value:
-        return "-"
-
-    normalized = value.strip().replace(" ", "T")
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
-        try:
-            parsed = datetime.strptime(normalized, fmt)
-            return parsed.strftime("%m/%d/%Y %I:%M %p")
-        except ValueError:
-            continue
-    return value
+    parsed = parse_display_datetime(value)
+    if not parsed:
+        return "-" if value else ""
+    return parsed.strftime("%m/%d/%Y %I:%M %p")
 
 
 def format_time_display(value: str | None) -> str:
-    if not value:
-        return "-"
+    parsed = parse_display_datetime(value)
+    if not parsed:
+        return ""
+    return parsed.strftime("%I:%M %p")
 
-    normalized = value.strip().replace(" ", "T")
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
-        try:
-            parsed = datetime.strptime(normalized, fmt)
-            return parsed.strftime("%I:%M %p")
-        except ValueError:
-            continue
-    return value
+
+def parse_display_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    normalized = value.strip().replace(" ", "T").replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
+            try:
+                return datetime.strptime(normalized, fmt)
+            except ValueError:
+                continue
+        return None
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(SAUDI_TZ).replace(tzinfo=None)
+    return parsed
 
 
 def format_month_label(value: str) -> str:
