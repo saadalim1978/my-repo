@@ -59,9 +59,12 @@
       <form method="post" action="{{ url_for('create_attendance') }}" class="form-grid">
         {% if is_admin %}
           <label class="field">
-            <span>الموظف المحدد</span>
-            <input type="text" value="{{ selected_employee.full_name if selected_employee else '' }}" readonly>
-            <input type="hidden" name="user_id" value="{{ selected_employee_id }}">
+            <span>الموظف</span>
+            <select name="user_id" required>
+              {% for user in users %}
+                <option value="{{ user.id }}" {% if user.id == selected_employee_id %}selected{% endif %}>{{ user.full_name }}</option>
+              {% endfor %}
+            </select>
           </label>
         {% endif %}
         <label class="field">

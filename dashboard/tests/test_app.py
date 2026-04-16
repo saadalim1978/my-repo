@@ -98,7 +98,8 @@ class AppTestCase(unittest.TestCase):
         self.login("aljawhara.ali@competitive.sa", "Admin@123")
         response = self.client.get("/dashboard?employee_id=3&attendance_period=day&attendance_date=2026-04-15")
         self.assertEqual(response.status_code, 200)
-        self.assertIn('name="user_id" value="3"'.encode("utf-8"), response.data)
+        self.assertIn('name="user_id"'.encode("utf-8"), response.data)
+        self.assertIn('<option value="3" selected>'.encode("utf-8"), response.data)
         self.assertIn("سارة خالد".encode("utf-8"), response.data)
 
         create_response = self.client.post(
