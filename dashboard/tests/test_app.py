@@ -87,6 +87,13 @@ class AppTestCase(unittest.TestCase):
         exported_rows = list(sheet.iter_rows(min_row=2, values_only=True))
         self.assertIn(("أحمد علي", "2026-04-17", "08:00 AM", "05:00 PM"), exported_rows)
 
+    def test_dashboard_export_uses_selected_employee(self) -> None:
+        self.login("aljawhara.ali@competitive.sa", "Admin@123")
+        response = self.client.get("/dashboard?employee_id=3&attendance_period=day&attendance_date=2026-04-15")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="employee_id" value="3"'.encode("utf-8"), response.data)
+        self.assertIn("/attendance/export".encode("utf-8"), response.data)
+
     def test_employee_cannot_export_attendance(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
         response = self.client.get("/attendance/export", follow_redirects=True)

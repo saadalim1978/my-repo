@@ -355,6 +355,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         export_query = {
             "attendance_period": attendance_period,
             "attendance_date": attendance_date,
+            "employee_id": selected_employee_id,
         }
 
         if is_admin():
@@ -382,11 +383,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 ORDER BY payrolls.month_label DESC, payrolls.created_at DESC
                 """
             )
-            selected_employee_id = request.args.get("employee_id", type=int)
-            if not selected_employee_id and users:
-                selected_employee_id = users[0]["id"]
-            if selected_employee_id:
-                export_query["employee_id"] = selected_employee_id
         else:
             attendance_summary = query_all(
                 """
