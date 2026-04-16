@@ -73,7 +73,7 @@
         </label>
         <label class="field">
           <span>التاريخ والوقت</span>
-          <input type="datetime-local" id="attendance-recorded-at" name="recorded_at" value="{{ now_iso_local }}" required>
+          <input type="datetime-local" id="attendance-recorded-at" name="recorded_at" value="{{ now_iso_local }}" step="1" required>
         </label>
         <label class="field">
           <span>العملية</span>
@@ -356,9 +356,30 @@
       dayNameInput.value = weekdayNames[selectedDate.getDay()];
     };
 
+    const pad = (value) => String(value).padStart(2, "0");
+
+    const currentDateTimeLocal = () => {
+      const now = new Date();
+      return [
+        now.getFullYear(),
+        pad(now.getMonth() + 1),
+        pad(now.getDate()),
+      ].join("-") + "T" + [
+        pad(now.getHours()),
+        pad(now.getMinutes()),
+        pad(now.getSeconds()),
+      ].join(":");
+    };
+
+    const syncCurrentDateTime = () => {
+      dateTimeInput.value = currentDateTimeLocal();
+      updateDayName();
+    };
+
     dateTimeInput.addEventListener("input", updateDayName);
     dateTimeInput.addEventListener("change", updateDayName);
-    updateDayName();
+    syncCurrentDateTime();
+    window.setInterval(syncCurrentDateTime, 1000);
   })();
 </script>
 {% endblock %}
