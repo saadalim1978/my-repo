@@ -66,7 +66,7 @@
         </label>
         <label class="field">
           <span>التاريخ والوقت</span>
-          <input type="datetime-local" id="attendance-recorded-at" name="recorded_at" value="{{ now_iso_local }}" step="1" required>
+          <input type="datetime-local" id="attendance-recorded-at" name="recorded_at" value="{{ now_iso_local }}" step="1" {% if not is_admin_user %}readonly{% endif %} required>
         </label>
         <label class="field">
           <span>العملية</span>
@@ -378,8 +378,12 @@
 
     dateTimeInput.addEventListener("input", updateDayName);
     dateTimeInput.addEventListener("change", updateDayName);
-    syncCurrentDateTime();
-    window.setInterval(syncCurrentDateTime, 1000);
+    if ({{ 'true' if is_admin_user else 'false' }}) {
+      updateDayName();
+    } else {
+      syncCurrentDateTime();
+      window.setInterval(syncCurrentDateTime, 1000);
+    }
   })();
 </script>
 {% endblock %}

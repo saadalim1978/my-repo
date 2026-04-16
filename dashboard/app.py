@@ -95,6 +95,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "format_time_display": format_time_display,
             "format_month_label": format_month_label,
             "get_weekday_name_ar": get_weekday_name_ar,
+            "is_admin_user": is_admin(),
             "now_iso_local": saudi_now().strftime("%Y-%m-%dT%H:%M"),
         }
 
@@ -449,11 +450,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def create_attendance() -> Response:
         if is_admin():
             user_id = request.form.get("user_id", type=int)
+            recorded_at = request.form.get("recorded_at", "").strip()
         else:
             user_id = g.user["id"]
+            recorded_at = saudi_now().strftime("%Y-%m-%dT%H:%M:%S")
 
         action = request.form.get("action", "").strip()
-        recorded_at = request.form.get("recorded_at", "").strip()
 
         if action not in {"دخول", "خروج"}:
             flash("نوع العملية غير صحيح.", "error")

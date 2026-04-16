@@ -4,7 +4,7 @@ import re
 import tempfile
 import unittest
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from unittest import mock
@@ -352,16 +352,20 @@ class AppTestCase(unittest.TestCase):
 
     def test_attendance_create_overwrites_same_day_same_action(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
-        self.client.post(
-            "/attendance/create",
-            data={"action": "دخول", "recorded_at": "2026-04-21T08:00"},
-            follow_redirects=True,
-        )
-        response = self.client.post(
-            "/attendance/create",
-            data={"action": "دخول", "recorded_at": "2026-04-21T09:30"},
-            follow_redirects=True,
-        )
+        first_now = datetime(2026, 4, 21, 8, 0, 0, tzinfo=timezone(timedelta(hours=3)))
+        second_now = datetime(2026, 4, 21, 9, 30, 0, tzinfo=timezone(timedelta(hours=3)))
+        with mock.patch("app.saudi_now", return_value=first_now), mock.patch("app.saudi_today", return_value=date(2026, 4, 21)):
+            self.client.post(
+                "/attendance/create",
+                data={"action": "دخول", "recorded_at": "2026-04-21T08:00"},
+                follow_redirects=True,
+            )
+        with mock.patch("app.saudi_now", return_value=second_now), mock.patch("app.saudi_today", return_value=date(2026, 4, 21)):
+            response = self.client.post(
+                "/attendance/create",
+                data={"action": "دخول", "recorded_at": "2026-04-21T09:30"},
+                follow_redirects=True,
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("تم تحديث آخر حركة لهذا اليوم".encode("utf-8"), response.data)
@@ -382,6 +386,22 @@ class AppTestCase(unittest.TestCase):
         self.assertIn("\u064a\u0645\u0643\u0646\u0643 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c \u0641\u0642\u0637 \u0641\u064a \u0646\u0641\u0633 \u0627\u0644\u064a\u0648\u0645.".encode("utf-8"), response.data)
         dashboard_response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-22")
         self.assertNotIn("08:00 AM".encode("utf-8"), dashboard_response.data)
+
+    def test_employee_cannot_override_attendance_date(self) -> None:
+        self.login("ahmed@competitive.local", "Employee@123")
+        fixed_now = datetime(2026, 4, 21, 9, 30, 0, tzinfo=timezone(timedelta(hours=3)))
+        with mock.patch("app.saudi_now", return_value=fixed_now), mock.patch("app.saudi_today", return_value=date(2026, 4, 21)):
+            response = self.client.post(
+                "/attendance/create",
+                data={"action": "\u062f\u062e\u0648\u0644", "recorded_at": "2026-04-15T08:00"},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        dashboard_response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-21")
+        self.assertIn("09:30 AM".encode("utf-8"), dashboard_response.data)
+        old_date_response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-15")
+        self.assertNotIn("09:30 AM".encode("utf-8"), old_date_response.data)
 
     def test_format_time_display_returns_time_only(self) -> None:
         self.assertEqual(format_time_display("2026-04-15T20:52"), "08:52 PM")
