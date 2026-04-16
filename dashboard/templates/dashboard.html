@@ -58,14 +58,7 @@
 
       <form method="post" action="{{ url_for('create_attendance') }}" class="form-grid">
         {% if is_admin %}
-          <label class="field">
-            <span>الموظف</span>
-            <select name="user_id" required>
-              {% for user in users %}
-                <option value="{{ user.id }}" {% if user.id == selected_employee_id %}selected{% endif %}>{{ user.full_name }}</option>
-              {% endfor %}
-            </select>
-          </label>
+          <input type="hidden" name="user_id" value="{{ selected_employee_id }}">
         {% endif %}
         <label class="field">
           <span>اليوم</span>
@@ -86,6 +79,16 @@
       </form>
 
       <form method="get" action="{{ url_for('dashboard') }}" class="form-grid">
+        {% if is_admin %}
+          <label class="field">
+            <span>الموظف</span>
+            <select name="employee_id">
+              {% for user in users %}
+                <option value="{{ user.id }}" {% if user.id == selected_employee_id %}selected{% endif %}>{{ user.full_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        {% endif %}
         <label class="field">
           <span>عرض السجل بحسب</span>
           <select name="attendance_period">
@@ -98,9 +101,6 @@
           <span>التاريخ المرجعي</span>
           <input type="date" name="attendance_date" value="{{ attendance_date }}" required>
         </label>
-        {% if is_admin and selected_employee_id %}
-          <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
-        {% endif %}
         <button type="submit" class="btn btn-outline">تحديث العرض</button>
       </form>
 
