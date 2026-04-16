@@ -59,12 +59,9 @@
       <form method="post" action="{{ url_for('create_attendance') }}" class="form-grid">
         {% if is_admin %}
           <label class="field">
-            <span>الموظف</span>
-            <select name="user_id" required>
-              {% for user in users %}
-                <option value="{{ user.id }}">{{ user.full_name }}</option>
-              {% endfor %}
-            </select>
+            <span>الموظف المحدد</span>
+            <input type="text" value="{{ selected_employee.full_name if selected_employee else '' }}" readonly>
+            <input type="hidden" name="user_id" value="{{ selected_employee_id }}">
           </label>
         {% endif %}
         <label class="field">
@@ -116,6 +113,7 @@
             <form method="post" action="{{ url_for('delete_attendance_range') }}">
               <input type="hidden" name="attendance_period" value="{{ attendance_period }}">
               <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
+              <input type="hidden" name="employee_id" value="{{ selected_employee_id }}">
               <button type="submit" class="btn btn-outline">حذف الفترة المعروضة</button>
             </form>
           </div>

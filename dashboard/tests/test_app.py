@@ -94,6 +94,30 @@ class AppTestCase(unittest.TestCase):
         self.assertIn('name="employee_id" value="3"'.encode("utf-8"), response.data)
         self.assertIn("/attendance/export".encode("utf-8"), response.data)
 
+    def test_admin_attendance_selection_stays_on_selected_employee(self) -> None:
+        self.login("aljawhara.ali@competitive.sa", "Admin@123")
+        response = self.client.get("/dashboard?employee_id=3&attendance_period=day&attendance_date=2026-04-15")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="user_id" value="3"'.encode("utf-8"), response.data)
+        self.assertIn("سارة خالد".encode("utf-8"), response.data)
+
+        create_response = self.client.post(
+            "/attendance/create",
+            data={"user_id": 3, "action": "دخول", "recorded_at": "2026-04-15T08:00"},
+            follow_redirects=False,
+        )
+        self.assertEqual(create_response.status_code, 302)
+        self.assertIn("employee_id=3", create_response.headers["Location"])
+
+        export_response = self.client.get(
+            "/attendance/export?employee_id=3&attendance_period=month&attendance_date=2026-04-15"
+        )
+        self.assertEqual(export_response.status_code, 200)
+        workbook = load_workbook(BytesIO(export_response.data))
+        exported_rows = list(workbook.active.iter_rows(min_row=2, values_only=True))
+        self.assertIn(("سارة خالد", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
+        self.assertNotIn(("أحمد علي", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
+
     def test_employee_cannot_export_attendance(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
         response = self.client.get("/attendance/export", follow_redirects=True)

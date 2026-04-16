@@ -327,36 +327,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             anchor_date = date.today()
             attendance_date = anchor_date.isoformat()
         selected_employee_id = request.args.get("employee_id", type=int)
-        if not selected_employee_id and users:
-            selected_employee_id = users[0]["id"]
-        if not selected_employee_id:
-            flash("الرجاء اختيار الموظف المطلوب قبل تنزيل ملف الحضور والانصراف.", "error")
-            return redirect(
-                url_for(
-                    "dashboard",
-                    attendance_period=attendance_period,
-                    attendance_date=attendance_date,
-                )
-            )
-        employee = query_one(
-            "SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'",
-            (selected_employee_id,),
-        )
-        if not employee:
-            flash("تعذر العثور على الموظف المطلوب للتصدير.", "error")
-            return redirect(
-                url_for(
-                    "dashboard",
-                    attendance_period=attendance_period,
-                    attendance_date=attendance_date,
-                )
-            )
         range_start, range_end = get_attendance_range(anchor_date, attendance_period)
-        export_query = {
-            "attendance_period": attendance_period,
-            "attendance_date": attendance_date,
-            "employee_id": selected_employee_id,
-        }
+
+        if is_admin() and not selected_employee_id and users:
+            selected_employee_id = users[0]["id"]
 
         if is_admin():
             attendance_summary = query_all(
@@ -412,6 +386,22 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             )
             selected_employee_id = g.user["id"]
 
+        selected_employee = None
+        if selected_employee_id:
+            selected_employee = query_one(
+                "SELECT id, full_name FROM users WHERE id = ? AND role = 'employee'",
+                (selected_employee_id,),
+            )
+        if not selected_employee and users:
+            selected_employee = users[0]
+            selected_employee_id = selected_employee["id"]
+
+        export_query = {
+            "attendance_period": attendance_period,
+            "attendance_date": attendance_date,
+            "employee_id": selected_employee_id,
+        }
+
         current_payroll = None
         if selected_employee_id:
             current_payroll = query_one(
@@ -444,6 +434,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             payroll_records=payroll_records,
             current_payroll=current_payroll,
             selected_employee_id=selected_employee_id,
+            selected_employee=selected_employee,
             dashboard_stats=dashboard_stats,
             is_admin=is_admin(),
             attendance_period=attendance_period,
@@ -464,15 +455,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         if action not in {"دخول", "خروج"}:
             flash("نوع العملية غير صحيح.", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("dashboard", employee_id=user_id))
 
         if not user_id or not recorded_at:
             flash("الرجاء إكمال بيانات الحضور والانصراف.", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("dashboard", employee_id=user_id))
         attendance_date = recorded_at[:10]
         if not is_admin() and action == "\u062e\u0631\u0648\u062c" and attendance_date != saudi_today().isoformat():
             flash("\u064a\u0645\u0643\u0646\u0643 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062e\u0631\u0648\u062c \u0641\u0642\u0637 \u0641\u064a \u0646\u0641\u0633 \u0627\u0644\u064a\u0648\u0645.", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("dashboard", employee_id=user_id))
         existing_record = query_one(
             """
             SELECT id
@@ -500,7 +491,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 (user_id, action, recorded_at, utcnow(), utcnow()),
             )
             flash("تم حفظ سجل الحضور والانصراف بنجاح.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", employee_id=user_id))
 
     @app.post("/attendance/<int:attendance_id>/update")
     @login_required
@@ -512,7 +503,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
         if action not in {"دخول", "خروج"} or not user_id or not recorded_at:
             flash("بيانات التعديل غير مكتملة.", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("dashboard", employee_id=user_id))
 
         execute_db(
             """
@@ -523,15 +514,16 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             (user_id, action, recorded_at, utcnow(), attendance_id),
         )
         flash("تم تعديل السجل بنجاح.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", employee_id=user_id))
 
     @app.post("/attendance/<int:attendance_id>/delete")
     @login_required
     @admin_required
     def delete_attendance(attendance_id: int) -> Response:
+        record = query_one("SELECT user_id FROM attendance WHERE id = ?", (attendance_id,))
         execute_db("DELETE FROM attendance WHERE id = ?", (attendance_id,))
         flash("تم حذف السجل.", "success")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("dashboard", employee_id=record["user_id"] if record else None))
 
     @app.post("/attendance/delete-range")
     @login_required
@@ -539,11 +531,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def delete_attendance_range() -> Response:
         attendance_period = request.form.get("attendance_period", "day").strip()
         attendance_date = request.form.get("attendance_date", "").strip()
+        selected_employee_id = request.form.get("employee_id", type=int)
         try:
             anchor_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
         except ValueError:
             flash("تاريخ الحذف غير صحيح.", "error")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("dashboard", employee_id=selected_employee_id))
 
         range_start, range_end = get_attendance_range(anchor_date, attendance_period)
         deleted_count = execute_db_count(
@@ -556,6 +549,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 "dashboard",
                 attendance_period=attendance_period,
                 attendance_date=attendance_date,
+                employee_id=selected_employee_id,
             )
         )
 
