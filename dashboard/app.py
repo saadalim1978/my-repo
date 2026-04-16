@@ -94,6 +94,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             "format_datetime_display": format_datetime_display,
             "format_time_display": format_time_display,
             "format_month_label": format_month_label,
+            "get_weekday_name_ar": get_weekday_name_ar,
             "now_iso_local": saudi_now().strftime("%Y-%m-%dT%H:%M"),
         }
 
@@ -439,6 +440,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             is_admin=is_admin(),
             attendance_period=attendance_period,
             attendance_date=attendance_date,
+            today_day_name=get_weekday_name_ar(saudi_today()),
             export_query=export_query,
         )
 
@@ -1019,6 +1021,11 @@ def saudi_now() -> datetime:
 
 def saudi_today() -> date:
     return saudi_now().date()
+
+
+def get_weekday_name_ar(value: date | datetime) -> str:
+    target_date = value.date() if isinstance(value, datetime) else value
+    return WEEKDAY_NAMES_AR.get(target_date.weekday(), "")
 
 
 def utcnow() -> str:

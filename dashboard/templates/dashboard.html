@@ -68,15 +68,19 @@
           </label>
         {% endif %}
         <label class="field">
+          <span>اليوم</span>
+          <input type="text" value="{{ today_day_name }}" readonly>
+        </label>
+        <label class="field">
+          <span>التاريخ والوقت</span>
+          <input type="datetime-local" name="recorded_at" value="{{ now_iso_local }}" required>
+        </label>
+        <label class="field">
           <span>العملية</span>
           <select name="action" required>
             <option value="دخول">دخول</option>
             <option value="خروج">خروج</option>
           </select>
-        </label>
-        <label class="field">
-          <span>التاريخ والوقت</span>
-          <input type="datetime-local" name="recorded_at" value="{{ now_iso_local }}" required>
         </label>
         <button type="submit" class="btn btn-primary">{{ "إضافة سجل" if is_admin else "تسجيل العملية" }}</button>
       </form>

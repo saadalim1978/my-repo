@@ -11,7 +11,7 @@ from unittest import mock
 
 from openpyxl import load_workbook
 
-from app import create_app, format_time_display
+from app import create_app, format_time_display, get_weekday_name_ar, saudi_today
 
 
 class AppTestCase(unittest.TestCase):
@@ -58,6 +58,13 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("تسجيل الدخول".encode("utf-8"), response.data)
         self.assertIn("إرسال رابط إكمال التسجيل".encode("utf-8"), response.data)
+
+    def test_dashboard_shows_today_name_in_attendance_form(self) -> None:
+        response = self.login("ahmed@competitive.local", "Employee@123")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("اليوم", page)
+        self.assertIn(get_weekday_name_ar(saudi_today()), page)
 
     def test_admin_can_login_and_export_attendance(self) -> None:
         response = self.login("aljawhara.ali@competitive.sa", "Admin@123")
