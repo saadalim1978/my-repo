@@ -609,7 +609,19 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Attendance"
+        header_fill = PatternFill(fill_type="solid", fgColor="2D7B63")
+        weekend_fill = PatternFill(fill_type="solid", fgColor="FFFF00")
+        header_font = Font(color="FFFFFF", bold=True)
+        center_alignment = Alignment(horizontal="center", vertical="center")
+        light_side = Side(style="thin", color="D9D9D9")
+        cell_border = Border(left=light_side, right=light_side, top=light_side, bottom=light_side)
         sheet.append(["اسم الموظف", "اليوم", "التاريخ", "وقت الدخول", "وقت الخروج"])
+
+        for cell in sheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_alignment
+            cell.border = cell_border
 
         for row in rows:
             sheet.append(
@@ -621,6 +633,18 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     format_time_display(row["last_check_out"]) if row["last_check_out"] else "",
                 ]
             )
+            row_index = sheet.max_row
+            attendance_weekday = datetime.strptime(row["attendance_date"], "%Y-%m-%d").date().weekday()
+            for cell in sheet[row_index]:
+                cell.alignment = center_alignment
+                cell.border = cell_border
+                if attendance_weekday in {4, 5}:
+                    cell.fill = weekend_fill
+
+        for row_index in range(2, sheet.max_row + 1):
+            for cell in sheet[row_index]:
+                cell.alignment = center_alignment
+                cell.border = cell_border
 
         sheet.column_dimensions["A"].width = 24
         sheet.column_dimensions["B"].width = 16
