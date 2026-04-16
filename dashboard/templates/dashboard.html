@@ -132,6 +132,7 @@
           <thead>
             <tr>
               <th>الموظف</th>
+              <th>اليوم</th>
               <th>التاريخ</th>
               <th>سجل الدخول</th>
               <th>سجل الخروج</th>
@@ -141,13 +142,14 @@
             {% for record in attendance_summary %}
               <tr>
                 <td>{{ record.full_name }}</td>
+                <td>{{ get_weekday_name_ar(record.attendance_date) }}</td>
                 <td>{{ record.attendance_date }}</td>
                 <td>{{ format_time_display(record.first_check_in) }}</td>
                 <td>{{ format_time_display(record.last_check_out) }}</td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="4">لا توجد سجلات للفترة المحددة.</td>
+                <td colspan="5">لا توجد سجلات للفترة المحددة.</td>
               </tr>
             {% endfor %}
           </tbody>

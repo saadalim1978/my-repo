@@ -342,6 +342,9 @@ class AppTestCase(unittest.TestCase):
 
         response = self.client.get("/dashboard?attendance_period=day&attendance_date=2026-04-20")
         self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("اليوم", page)
+        self.assertIn(get_weekday_name_ar(date(2026, 4, 20)), page)
         self.assertIn("سجل الدخول".encode("utf-8"), response.data)
         self.assertIn("سجل الخروج".encode("utf-8"), response.data)
         self.assertIn("08:00 AM".encode("utf-8"), response.data)

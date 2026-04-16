@@ -1023,8 +1023,14 @@ def saudi_today() -> date:
     return saudi_now().date()
 
 
-def get_weekday_name_ar(value: date | datetime) -> str:
-    target_date = value.date() if isinstance(value, datetime) else value
+def get_weekday_name_ar(value: date | datetime | str) -> str:
+    if isinstance(value, str):
+        try:
+            target_date = datetime.strptime(value.strip()[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return ""
+    else:
+        target_date = value.date() if isinstance(value, datetime) else value
     return WEEKDAY_NAMES_AR.get(target_date.weekday(), "")
 
 
