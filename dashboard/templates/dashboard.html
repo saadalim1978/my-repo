@@ -69,11 +69,11 @@
         {% endif %}
         <label class="field">
           <span>اليوم</span>
-          <input type="text" value="{{ today_day_name }}" readonly>
+          <input type="text" id="attendance-day-name" value="{{ today_day_name }}" readonly>
         </label>
         <label class="field">
           <span>التاريخ والوقت</span>
-          <input type="datetime-local" name="recorded_at" value="{{ now_iso_local }}" required>
+          <input type="datetime-local" id="attendance-recorded-at" name="recorded_at" value="{{ now_iso_local }}" required>
         </label>
         <label class="field">
           <span>العملية</span>
@@ -325,4 +325,40 @@
     </div>
   </section>
 </main>
+<script>
+  (() => {
+    const dateTimeInput = document.getElementById("attendance-recorded-at");
+    const dayNameInput = document.getElementById("attendance-day-name");
+    if (!dateTimeInput || !dayNameInput) return;
+
+    const weekdayNames = [
+      "الأحد",
+      "الاثنين",
+      "الثلاثاء",
+      "الأربعاء",
+      "الخميس",
+      "الجمعة",
+      "السبت",
+    ];
+
+    const updateDayName = () => {
+      if (!dateTimeInput.value) {
+        dayNameInput.value = "";
+        return;
+      }
+
+      const selectedDate = new Date(dateTimeInput.value);
+      if (Number.isNaN(selectedDate.getTime())) {
+        dayNameInput.value = "";
+        return;
+      }
+
+      dayNameInput.value = weekdayNames[selectedDate.getDay()];
+    };
+
+    dateTimeInput.addEventListener("input", updateDayName);
+    dateTimeInput.addEventListener("change", updateDayName);
+    updateDayName();
+  })();
+</script>
 {% endblock %}
