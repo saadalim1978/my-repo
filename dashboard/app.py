@@ -607,12 +607,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Attendance"
-        sheet.append(["اسم الموظف", "التاريخ", "وقت الدخول", "وقت الخروج"])
+        sheet.append(["اسم الموظف", "اليوم", "التاريخ", "وقت الدخول", "وقت الخروج"])
 
         for row in rows:
             sheet.append(
                 [
                     employee["full_name"],
+                    get_weekday_name_ar(row["attendance_date"]),
                     row["attendance_date"],
                     format_time_display(row["first_check_in"]) if row["first_check_in"] else "",
                     format_time_display(row["last_check_out"]) if row["last_check_out"] else "",
@@ -623,6 +624,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         sheet.column_dimensions["B"].width = 16
         sheet.column_dimensions["C"].width = 16
         sheet.column_dimensions["D"].width = 16
+        sheet.column_dimensions["E"].width = 16
         sheet.sheet_view.rightToLeft = True
 
         buffer = io.BytesIO()

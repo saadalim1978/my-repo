@@ -90,9 +90,9 @@ class AppTestCase(unittest.TestCase):
         workbook = load_workbook(BytesIO(export_response.data))
         sheet = workbook.active
         self.assertEqual(sheet.title, "Attendance")
-        self.assertEqual(sheet.max_column, 4)
+        self.assertEqual(sheet.max_column, 5)
         exported_rows = list(sheet.iter_rows(min_row=2, values_only=True))
-        self.assertIn(("أحمد علي", "2026-04-17", "08:00 AM", "05:00 PM"), exported_rows)
+        self.assertIn(("أحمد علي", "الجمعة", "2026-04-17", "08:00 AM", "05:00 PM"), exported_rows)
 
     def test_dashboard_export_uses_selected_employee(self) -> None:
         self.login("aljawhara.ali@competitive.sa", "Admin@123")
@@ -123,8 +123,8 @@ class AppTestCase(unittest.TestCase):
         self.assertEqual(export_response.status_code, 200)
         workbook = load_workbook(BytesIO(export_response.data))
         exported_rows = list(workbook.active.iter_rows(min_row=2, values_only=True))
-        self.assertIn(("سارة خالد", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
-        self.assertNotIn(("أحمد علي", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
+        self.assertIn(("سارة خالد", "الأربعاء", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
+        self.assertNotIn(("أحمد علي", "الأربعاء", "2026-04-15", "08:00 AM", "08:00 AM"), exported_rows)
 
     def test_employee_cannot_export_attendance(self) -> None:
         self.login("ahmed@competitive.local", "Employee@123")
